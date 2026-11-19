@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/divmora/code-review-bot/compare/v0.2.0...v0.3.0) (2026-11-19)
+
+
+### Features
+
+* support Bitbucket Cloud ([1c28e19](https://github.com/divmora/code-review-bot/commit/1c28e1964406fc7dee80ce75659844069c794ce6))
+
 ## [0.2.0](https://github.com/divmora/code-review-bot/compare/v0.1.0...v0.2.0) (2026-11-19)
 
 
