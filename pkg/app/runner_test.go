@@ -41,7 +41,7 @@ func fakeLLM(t *testing.T, reviewJSON string) (*httptest.Server, *[]string) {
 			content = reviewJSON
 		}
 		b, _ := json.Marshal(content)
-		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s},"finish_reason":"stop"}],"usage":{"prompt_tokens":50,"completion_tokens":5}}`, b)
+		_, _ = fmt.Fprintf(w, `{"choices":[{"message":{"content":%s},"finish_reason":"stop"}],"usage":{"prompt_tokens":50,"completion_tokens":5}}`, b)
 	}))
 	t.Cleanup(srv.Close)
 	return srv, &prompts
@@ -77,36 +77,36 @@ func (g *fakeGitHub) handler(t *testing.T) http.Handler {
 		p := r.URL.Path
 		switch {
 		case r.Method == "GET" && p == "/repos/o/r/pulls/7":
-			fmt.Fprintf(w, `{"title":"feat: handler","body":"adds A","draft":false,"html_url":"https://github.com/o/r/pull/7","user":{"login":"dev"},"head":{"ref":"feat","sha":%q},"base":{"ref":"main","sha":"base1"}}`, g.head)
+			_, _ = fmt.Fprintf(w, `{"title":"feat: handler","body":"adds A","draft":false,"html_url":"https://github.com/o/r/pull/7","user":{"login":"dev"},"head":{"ref":"feat","sha":%q},"base":{"ref":"main","sha":"base1"}}`, g.head)
 		case r.Method == "GET" && p == "/repos/o/r/pulls/7/files":
 			b, _ := json.Marshal(appPatch)
-			fmt.Fprintf(w, `[{"filename":"app.go","status":"modified","patch":%s,"changes":4},{"filename":"go.sum","status":"modified","patch":"@@ -1 +1 @@\n-a\n+b","changes":2}]`, b)
+			_, _ = fmt.Fprintf(w, `[{"filename":"app.go","status":"modified","patch":%s,"changes":4},{"filename":"go.sum","status":"modified","patch":"@@ -1 +1 @@\n-a\n+b","changes":2}]`, b)
 		case r.Method == "GET" && strings.HasPrefix(p, "/repos/o/r/contents/"):
 			if strings.HasSuffix(p, ".codereview.yaml") {
 				if r.URL.Query().Get("ref") != "base1" {
 					t.Errorf("repo config must be read from the base commit, got ref=%s", r.URL.Query().Get("ref"))
 				}
-				io.WriteString(w, "profile: assertive\ninstructions: Never panic in library code.\n")
+				_, _ = io.WriteString(w, "profile: assertive\ninstructions: Never panic in library code.\n")
 				return
 			}
 			if strings.HasSuffix(p, "/AGENTS.md") && !strings.Contains(p, "/contents/app/") {
 				if r.URL.Query().Get("ref") != "base1" {
 					t.Errorf("guidelines must come from the base commit, got ref=%s", r.URL.Query().Get("ref"))
 				}
-				io.WriteString(w, "Library code must never panic; return errors.")
+				_, _ = io.WriteString(w, "Library code must never panic; return errors.")
 				return
 			}
 			if !strings.HasSuffix(p, "/app.go") {
 				w.WriteHeader(404)
 				return
 			}
-			io.WriteString(w, "package app\n\nfunc A() {\n\tpanic(\"todo\")\n}\n// trailing\n")
+			_, _ = io.WriteString(w, "package app\n\nfunc A() {\n\tpanic(\"todo\")\n}\n// trailing\n")
 		case r.Method == "GET" && p == "/repos/o/r/issues/7/comments":
 			if g.summary != "" {
 				b, _ := json.Marshal(g.summary)
-				fmt.Fprintf(w, `[{"id":1,"body":"hello"},{"id":%d,"body":%s}]`, g.summaryID, b)
+				_, _ = fmt.Fprintf(w, `[{"id":1,"body":"hello"},{"id":%d,"body":%s}]`, g.summaryID, b)
 			} else {
-				io.WriteString(w, `[]`)
+				_, _ = io.WriteString(w, `[]`)
 			}
 		case r.Method == "GET" && p == "/repos/o/r/pulls/7/comments":
 			var items []string
@@ -114,24 +114,24 @@ func (g *fakeGitHub) handler(t *testing.T) http.Handler {
 				j, _ := json.Marshal(b)
 				items = append(items, `{"id":5,"body":`+string(j)+`}`)
 			}
-			io.WriteString(w, "["+strings.Join(items, ",")+"]")
+			_, _ = io.WriteString(w, "["+strings.Join(items, ",")+"]")
 		case r.Method == "GET" && strings.HasPrefix(p, "/repos/o/r/compare/"):
 			var items []string
 			for _, f := range g.compare {
 				items = append(items, fmt.Sprintf(`{"filename":%q}`, f))
 			}
-			io.WriteString(w, `{"files":[`+strings.Join(items, ",")+`]}`)
+			_, _ = io.WriteString(w, `{"files":[`+strings.Join(items, ",")+`]}`)
 		case r.Method == "POST" && p == "/repos/o/r/pulls/7/reviews":
 			if g.rejectBatch {
 				w.WriteHeader(422)
-				io.WriteString(w, `{"message":"Unprocessable"}`)
+				_, _ = io.WriteString(w, `{"message":"Unprocessable"}`)
 				return
 			}
 			g.reviews = append(g.reviews, body)
 			for _, c := range body["comments"].([]any) {
 				g.inline = append(g.inline, c.(map[string]any)["body"].(string))
 			}
-			io.WriteString(w, `{}`)
+			_, _ = io.WriteString(w, `{}`)
 		case r.Method == "POST" && p == "/repos/o/r/pulls/7/comments":
 			if body["line"].(float64) == 6 {
 				w.WriteHeader(422)
@@ -139,22 +139,22 @@ func (g *fakeGitHub) handler(t *testing.T) http.Handler {
 			}
 			g.singles = append(g.singles, body)
 			g.inline = append(g.inline, body["body"].(string))
-			io.WriteString(w, `{}`)
+			_, _ = io.WriteString(w, `{}`)
 		case r.Method == "POST" && p == "/repos/o/r/issues/7/comments":
 			g.issueNotes = append(g.issueNotes, body["body"].(string))
 			g.summary, g.summaryID = body["body"].(string), 99
-			io.WriteString(w, `{"id":99}`)
+			_, _ = io.WriteString(w, `{"id":99}`)
 		case r.Method == "PATCH" && p == fmt.Sprintf("/repos/o/r/issues/comments/%d", g.summaryID):
 			g.patched = append(g.patched, body["body"].(string))
 			g.summary = body["body"].(string)
-			io.WriteString(w, `{}`)
+			_, _ = io.WriteString(w, `{}`)
 		case r.Method == "POST" && strings.HasPrefix(p, "/repos/o/r/statuses/"):
 			body["sha"] = strings.TrimPrefix(p, "/repos/o/r/statuses/")
 			g.statuses = append(g.statuses, body)
-			io.WriteString(w, `{}`)
+			_, _ = io.WriteString(w, `{}`)
 		case r.Method == "PATCH" && p == "/repos/o/r/pulls/7":
 			g.prPatches = append(g.prPatches, body)
-			io.WriteString(w, `{}`)
+			_, _ = io.WriteString(w, `{}`)
 		default:
 			t.Errorf("unexpected request %s %s", r.Method, r.URL)
 			w.WriteHeader(404)
@@ -163,28 +163,14 @@ func (g *fakeGitHub) handler(t *testing.T) http.Handler {
 }
 
 func newRunner(t *testing.T, llmURL string) *Runner {
-	cfg, err := config.Load(filepath.Join(t.TempDir(), "none.yaml"))
-	if err == nil || !os.IsNotExist(unwrapAll(err)) {
-		// Load with an explicit missing path errors; build defaults instead.
-	}
 	t.Setenv("CODEREVIEW_CONFIG", "")
-	cfg, err = config.Load("")
+	cfg, err := config.Load("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg.Models = map[string]llm.ModelConfig{"fake": {Provider: "openai-compatible", Model: "m", BaseURL: llmURL, MaxRetries: -1}}
 	cfg.Model = "fake"
 	return &Runner{Cfg: cfg, Logger: quiet}
-}
-
-func unwrapAll(err error) error {
-	for {
-		u, ok := err.(interface{ Unwrap() error })
-		if !ok {
-			return err
-		}
-		err = u.Unwrap()
-	}
 }
 
 func TestGitHubEndToEnd(t *testing.T) {

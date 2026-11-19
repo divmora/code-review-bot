@@ -112,5 +112,3 @@ func IsRetryable(err error) bool {
 	}
 	return errors.Is(err, context.DeadlineExceeded) || isNetErr(err)
 }
-
-func float(v float64) *float64 { return &v }

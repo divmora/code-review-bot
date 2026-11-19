@@ -62,7 +62,7 @@ func TestExtractJSON(t *testing.T) {
 			continue
 		}
 		var v struct{ OK bool }
-		if json.Unmarshal(raw, &v); !v.OK {
+		if err := json.Unmarshal(raw, &v); err != nil || !v.OK {
 			t.Errorf("ExtractJSON(%q) = %s", in, raw)
 		}
 	}

@@ -349,7 +349,7 @@ func (r *rest) do(ctx context.Context, method, path string, in, out any) (http.H
 			return nil, fmt.Errorf("%s %s %s: %w", r.name, method, path, err)
 		}
 		data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			return nil, err
 		}

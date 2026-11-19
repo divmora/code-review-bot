@@ -23,7 +23,7 @@ func TestGitLabScoreLabels(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		switch {
 		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/merge_requests/7"):
-			io.WriteString(w, `{"labels":["bug","Quality Score::60","Security Score::100","Maintainability Score::90"]}`)
+			_, _ = io.WriteString(w, `{"labels":["bug","Quality Score::60","Security Score::100","Maintainability Score::90"]}`)
 		case r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/labels"):
 			var m map[string]string
 			_ = json.Unmarshal(body, &m)
@@ -32,10 +32,10 @@ func TestGitLabScoreLabels(t *testing.T) {
 				w.WriteHeader(409) // already exists
 				return
 			}
-			io.WriteString(w, `{}`)
+			_, _ = io.WriteString(w, `{}`)
 		case r.Method == "PUT" && strings.HasSuffix(r.URL.Path, "/merge_requests/7"):
 			_ = json.Unmarshal(body, &put)
-			io.WriteString(w, `{}`)
+			_, _ = io.WriteString(w, `{}`)
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL)
 		}
@@ -67,17 +67,17 @@ func TestGitHubScoreLabels(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		switch {
 		case r.Method == "GET" && r.URL.Path == "/repos/o/r/issues/7/labels":
-			io.WriteString(w, `[{"name":"bug"},{"name":"Quality Score: 60"},{"name":"Security Score: 100"}]`)
+			_, _ = io.WriteString(w, `[{"name":"bug"},{"name":"Quality Score: 60"},{"name":"Security Score: 100"}]`)
 		case r.Method == "DELETE":
 			deleted = append(deleted, r.URL.Path)
-			io.WriteString(w, `[]`)
+			_, _ = io.WriteString(w, `[]`)
 		case r.Method == "POST" && r.URL.Path == "/repos/o/r/labels":
 			w.WriteHeader(422) // exists
 		case r.Method == "POST" && r.URL.Path == "/repos/o/r/issues/7/labels":
 			var m struct{ Labels []string }
 			_ = json.Unmarshal(body, &m)
 			added = m.Labels
-			io.WriteString(w, `[]`)
+			_, _ = io.WriteString(w, `[]`)
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL)
 		}
@@ -106,7 +106,7 @@ func TestCommitStatus(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&m)
 		got = append(got, m)
 		paths = append(paths, r.URL.Path)
-		io.WriteString(w, `{}`)
+		_, _ = io.WriteString(w, `{}`)
 	}))
 	defer srv.Close()
 	long := strings.Repeat("x", 200)
@@ -131,7 +131,7 @@ func TestBotStateReadsPostedComments(t *testing.T) {
 	jb, _ := json.Marshal(body)
 	jq, _ := json.Marshal(qbody)
 	gl := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, `[{"notes":[{"id":1,"body":`+string(jb)+`,"position":{"new_path":"a/E.php","new_line":289}},
+		_, _ = io.WriteString(w, `[{"notes":[{"id":1,"body":`+string(jb)+`,"position":{"new_path":"a/E.php","new_line":289}},
 			{"id":2,"body":`+string(jq)+`,"position":{"new_path":"a/P.php","new_line":261}},
 			{"id":3,"body":"a human comment","position":{"new_path":"a/E.php","new_line":10}}]}]`)
 	}))
@@ -146,11 +146,11 @@ func TestBotStateReadsPostedComments(t *testing.T) {
 
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/issues/") {
-			io.WriteString(w, `[]`)
+			_, _ = io.WriteString(w, `[]`)
 			return
 		}
 		// An outdated comment has line null but original_line set.
-		io.WriteString(w, `[{"body":`+string(jb)+`,"path":"E.php","line":null,"original_line":288}]`)
+		_, _ = io.WriteString(w, `[{"body":`+string(jb)+`,"path":"E.php","line":null,"original_line":288}]`)
 	}))
 	defer gh.Close()
 	st, err = NewGitHub(gh.URL, StaticToken("t")).BotState(context.Background(), &PR{Ref: Ref{Repo: "o/r", Number: 1}})

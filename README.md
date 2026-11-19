@@ -92,7 +92,7 @@ Every response is also parsed leniently (fenced or prose-wrapped JSON), so weake
 **GitHub Actions**: see [`examples/github-workflow.yml`](examples/github-workflow.yml).
 
 ```yaml
-- uses: divmora/code-review-bot@v0.1.0
+- uses: divmora/code-review-bot@v0.2.0
   with:
     model: anthropic:claude-sonnet-5-5
     fail-on: critical          # optional gate

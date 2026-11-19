@@ -145,7 +145,7 @@ func httpJSON(ctx context.Context, hc *http.Client, provider, url string, header
 	if err != nil {
 		return fmt.Errorf("%s request: %w", provider, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 	if err != nil {
 		return fmt.Errorf("%s read response: %w", provider, err)

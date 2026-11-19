@@ -731,7 +731,7 @@ func normPath(p string) string {
 
 func fingerprint(f Finding) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s", f.Path, f.Category, strings.ToLower(f.Title), strings.TrimSpace(f.lineText))
+	_, _ = fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s", f.Path, f.Category, strings.ToLower(f.Title), strings.TrimSpace(f.lineText))
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
@@ -890,7 +890,7 @@ var stopWords = map[string]bool{"the": true, "and": true, "for": true, "with": t
 // letters ("overwritten", "overwrite" -> "overwr").
 func titleStems(t string) []string {
 	var out []string
-	for _, w := range strings.FieldsFunc(strings.ToLower(t), func(r rune) bool { return !(r >= 'a' && r <= 'z') }) {
+	for _, w := range strings.FieldsFunc(strings.ToLower(t), func(r rune) bool { return r < 'a' || r > 'z' }) {
 		if len(w) < 4 || stopWords[w] {
 			continue
 		}

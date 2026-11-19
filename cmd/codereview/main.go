@@ -135,7 +135,7 @@ func cmdReview(ctx context.Context, args []string) error {
 	commitStatus := fs.Bool("commit-status", false, "with --post: set a \"codereview\" status on the reviewed commit (running, then success/failed)")
 	verifyModel := fs.String("verify-model", "", "model for the verification pass (profile or provider:model); default review.verify_model or the review model")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "Usage: codereview review [PR_URL] [flags]\n\nWithout PR_URL, the PR is detected from GitHub Actions or GitLab CI, or use --local.\n\n")
+		_, _ = fmt.Fprintf(fs.Output(), "Usage: codereview review [PR_URL] [flags]\n\nWithout PR_URL, the PR is detected from GitHub Actions or GitLab CI, or use --local.\n\n")
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(reorder(args))
