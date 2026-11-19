@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -644,5 +645,76 @@ func TestScoreFloors(t *testing.T) {
 	fs = append(fs, Finding{Category: "security", Severity: Major})
 	if s := finalScores(Scores{Quality: 90, Security: 30, Maintainability: 95}, fs); s.Security != 30 {
 		t.Errorf("a remaining major security issue keeps the model's low score: %+v", s)
+	}
+}
+
+func TestTwoPassReview(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	fake := &scripted{
+		review: func(req llm.Request) (string, error) {
+			mu.Lock()
+			calls++
+			mu.Unlock()
+			shared := `{"path":"main.go","start_line":4,"end_line":4,"severity":"major","category":"bug","title":"nil map write","body":"x","confidence":0.9}`
+			if strings.Contains(req.Messages[0].Content, "assume they missed something") {
+				return `{"files":[],"comments":[` + shared + `,{"path":"main.go","start_line":6,"end_line":6,"severity":"major","category":"security","title":"token logged","body":"y","confidence":0.9}]}`, nil
+			}
+			return `{"files":[],"comments":[` + shared + `,{"path":"main.go","start_line":5,"end_line":5,"severity":"minor","category":"bug","title":"off by one","body":"z","confidence":0.8}]}`, nil
+		},
+		summary: `{"summary":"s","cohorts":[],"effort":1,"scores":{"quality":80,"security":80,"maintainability":90}}`,
+	}
+	lim := limits()
+	lim.Passes = 2
+	f := false
+	lim.Verify = &f
+	files := testFiles(t)[:1]
+	files[0].Hunks[0].Lines[6].Text = "\tx := 3"
+	res, err := (&Engine{LLM: fake, Limits: lim, Logger: quiet}).Run(context.Background(), Input{Files: files, Repo: defaults()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var titles []string
+	for _, x := range res.Findings {
+		titles = append(titles, x.Title)
+	}
+	sort.Strings(titles)
+	if strings.Join(titles, ",") != "nil map write,off by one,token logged" {
+		t.Errorf("two passes should union their findings and merge the shared one: %v", titles)
+	}
+	if calls != 2 || res.Usage.InputTokens != 200 {
+		t.Errorf("one reviewer call per pass: calls=%d usage=%+v", calls, res.Usage)
+	}
+}
+
+// TestRepeatedFindingsAreVerified: a speculative finding that matches a
+// comment posted by an earlier run must still be dropped by the verifier,
+// or it keeps dragging the scores down.
+func TestRepeatedFindingsAreVerified(t *testing.T) {
+	fake := &scripted{
+		review: func(llm.Request) (string, error) {
+			return `{"files":[],"comments":[{"path":"main.go","start_line":4,"end_line":4,"severity":"major","category":"security","title":"SQL injection via column name","body":"if ever exposed","confidence":0.7}]}`, nil
+		},
+		verify:  `{"verdicts":[{"id":1,"verdict":"speculative","reason":"constant column","confidence":0.6}],"missed":[]}`,
+		summary: `{"summary":"s","cohorts":[],"effort":1,"scores":{"quality":90,"security":30,"maintainability":90}}`,
+	}
+	files := testFiles(t)[:1]
+	files[0].Hunks[0].Lines[6].Text = "\tx := 3"
+	existing := []vcs.PostedComment{{Path: "main.go", Line: 4, Title: "SQL injection via column name"}}
+	res, err := (&Engine{LLM: fake, Limits: limits(), Logger: quiet}).Run(context.Background(), Input{Files: files, Repo: defaults(), Existing: existing})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Repeated) != 0 || len(res.Findings) != 0 || res.Verification.FalsePositives != 1 {
+		t.Fatalf("the repeated speculative finding must be dropped: repeated=%v findings=%v ver=%+v", res.Repeated, res.Findings, res.Verification)
+	}
+	if res.Scores.Security != 85 {
+		t.Errorf("security must not stay at 30: %+v", res.Scores)
+	}
+}
+
+func TestVerifierPromptKeepsLoosenedChecks(t *testing.T) {
+	if !strings.Contains(verifySystem, "not a false positive just because the change looks") {
+		t.Error("the verifier must turn loosened checks into questions, not drop them")
 	}
 }

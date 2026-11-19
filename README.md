@@ -141,7 +141,7 @@ A second, skeptical **verification pass** (`review.verify`, on by default; one e
 The summary reports what the pass changed.
 
 
-Scores follow the remaining findings: a dimension with a critical, major or minor issue is capped at 40, 70 or 88; a dimension with no remaining issue of at least minor severity scores at least 85, so questions and findings the verifier removed never pull a score down. The reviewer is told to ask (not accuse) when a change loosens a check, saying what now passes that used to fail, and to back every security finding with input an attacker controls in the current code.
+Models vary from run to run. `review.passes: 2` (or 3) reviews each batch independently that many times and keeps the union of the findings, merged and then verified, at the cost of one more reviewer call per batch per pass. Findings already posted by an earlier run go through verification again too, so a speculative one cannot keep lowering the scores. Scores follow the remaining findings: a dimension with a critical, major or minor issue is capped at 40, 70 or 88; a dimension with no remaining issue of at least minor severity scores at least 85, so questions and findings the verifier removed never pull a score down. The reviewer is told to ask (not accuse) when a change loosens a check, saying what now passes that used to fail, and to back every security finding with input an attacker controls in the current code.
 ## Bitbucket Cloud
 
 Review `https://bitbucket.org/<workspace>/<repo>/pull-requests/<id>` like any other PR. Two kinds of credential work:

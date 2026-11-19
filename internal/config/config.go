@@ -68,6 +68,11 @@ type Review struct {
 	// missed. Off by default: additions skip verification themselves, and a
 	// real run posted a false "command injection" that way.
 	VerifyCanAdd bool `yaml:"verify_can_add"`
+	// Passes runs the reviewer this many times per batch (1 to 3) and keeps
+	// the union of the findings, merged and then verified. Models vary from
+	// run to run; a second pass catches issues one run misses, at the cost
+	// of one more reviewer call per batch. Default 1.
+	Passes int `yaml:"passes"`
 	// RepoConfigFile is the per-repo config path at the PR head.
 	RepoConfigFile string `yaml:"repo_config_file"`
 }

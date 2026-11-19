@@ -46,3 +46,13 @@ func TestStrictExamples(t *testing.T) {
 		t.Fatalf("examples/codereview.yaml should pass strict validation: %v", err)
 	}
 }
+
+func TestStrictPasses(t *testing.T) {
+	t.Setenv("CODEREVIEW_MODEL", "")
+	if _, err := Strict("inline", []byte("model: openai:x\nreview: {passes: 4}\n")); err == nil || !strings.Contains(err.Error(), "review.passes") {
+		t.Errorf("passes 4: %v", err)
+	}
+	if _, err := Strict("inline", []byte("model: openai:x\nreview: {passes: 2}\n")); err != nil {
+		t.Errorf("passes 2: %v", err)
+	}
+}

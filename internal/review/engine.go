@@ -72,6 +72,9 @@ type Finding struct {
 	Kind string `json:"kind,omitempty"`
 
 	lineText string
+	// repeat marks a finding already posted on the PR while it goes
+	// through verification with the new ones.
+	repeat bool
 }
 
 // KindQuestion marks a finding posted as a question to the author.
@@ -258,17 +261,21 @@ func (e *Engine) Run(ctx context.Context, in Input) (*Result, error) {
 		usage llm.Usage
 		err   error
 	}
-	results := make([]batchResult, len(batches))
+	// With review.passes > 1 each batch is reviewed several times
+	// independently; the findings are merged (and deduplicated) below.
+	passes := min(max(e.Limits.Passes, 1), 3)
+	results := make([]batchResult, len(batches)*passes)
 	sem := make(chan struct{}, max(e.Limits.Concurrency, 1))
 	var wg sync.WaitGroup
-	for i, b := range batches {
+	for j := range results {
+		i, pass, b := j/passes, j%passes, batches[j/passes]
 		wg.Add(1)
-		go func(i int, b []unit) {
+		go func(i, pass int, b []unit) {
 			defer wg.Done()
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
-				results[i].err = ctx.Err()
+				results[i*passes+pass].err = ctx.Err()
 				return
 			}
 			defer func() { <-sem }()
@@ -277,35 +284,51 @@ func (e *Engine) Run(ctx context.Context, in Input) (*Result, error) {
 			for _, u := range b {
 				user.WriteString(u.text)
 			}
-			user.WriteString("\nReview the files above and submit your findings.")
+			if pass == 0 {
+				user.WriteString("\nReview the files above and submit your findings.")
+			} else {
+				user.WriteString("\nReview the files above independently and submit your findings. Another reviewer looked at them too; " +
+					"assume they missed something: check every changed line for bugs, edge cases, error handling and security issues.")
+			}
 			resp, err := e.LLM.Complete(ctx, llm.Request{
 				System:   system,
 				Messages: []llm.Message{{Role: llm.User, Content: user.String()}},
 				Schema:   reviewSchema,
 			})
 			if err != nil {
-				results[i].err = err
+				results[i*passes+pass].err = err
 				return
 			}
 			var out reviewOutput
 			if err := json.Unmarshal(resp.JSON, &out); err != nil {
-				results[i].err = fmt.Errorf("decode review JSON: %w", err)
+				results[i*passes+pass].err = fmt.Errorf("decode review JSON: %w", err)
 				return
 			}
-			results[i] = batchResult{out: &out, usage: resp.Usage}
-		}(i, b)
+			results[i*passes+pass] = batchResult{out: &out, usage: resp.Usage}
+		}(i, pass, b)
 	}
 	wg.Wait()
 
-	failed := 0
-	for i, r := range results {
+	failed := 0 // batches where every pass failed
+	for j, r := range results {
+		i := j / passes
 		if r.err != nil {
-			failed++
+			batchFailed := true
+			for k := i * passes; k < (i+1)*passes; k++ {
+				batchFailed = batchFailed && results[k].err != nil
+			}
+			if batchFailed && j%passes == passes-1 {
+				failed++
+			}
 			paths := make([]string, 0, len(batches[i]))
 			for _, u := range batches[i] {
 				paths = append(paths, u.file.Path)
 			}
-			res.Errors = append(res.Errors, fmt.Sprintf("batch %d (%s): %v", i+1, strings.Join(uniq(paths), ", "), r.err))
+			label := fmt.Sprintf("batch %d", i+1)
+			if passes > 1 {
+				label += fmt.Sprintf(" pass %d", j%passes+1)
+			}
+			res.Errors = append(res.Errors, fmt.Sprintf("%s (%s): %v", label, strings.Join(uniq(paths), ", "), r.err))
 			log.Error("review batch failed", "batch", i+1, "error", r.err)
 			continue
 		}
@@ -349,7 +372,23 @@ func (e *Engine) Run(ctx context.Context, in Input) (*Result, error) {
 
 	kept := e.filter(res, in, findings)
 	if e.Limits.Verify == nil || *e.Limits.Verify {
-		kept = e.verify(ctx, res, in, byPath, contents, kept)
+		// Findings already posted on the PR are verified too: they count
+		// towards the scores, so a speculative one must not slip through
+		// just because an earlier run posted it.
+		repeats := res.Repeated
+		res.Repeated = nil
+		for i := range repeats {
+			repeats[i].repeat = true
+		}
+		verified := e.verify(ctx, res, in, byPath, contents, append(kept, repeats...))
+		kept = kept[:0:0]
+		for _, f := range verified {
+			if f.repeat {
+				res.Repeated = append(res.Repeated, f)
+			} else {
+				kept = append(kept, f)
+			}
+		}
 		kept = e.filter(res, in, kept) // fingerprints and dedupes findings the verifier added
 	}
 	e.rankAndCap(res, in, kept)

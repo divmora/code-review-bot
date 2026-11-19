@@ -30,6 +30,9 @@ For each candidate finding, read the code and decide:
 - "question": plausible, but whether it is a problem depends on data, runtime configuration or product intent that the
   code shown does not settle. The finding will be posted as a question to the author.
 For every verdict give confidence 0..1: how sure you are of the verdict itself.
+A finding that says the change makes a check, validation or permission more permissive (skips rows, broader matching,
+a fallback, a removed condition, a failure that now passes) is not a false positive just because the change looks
+deliberate: unless the PR description or a code comment explicitly says the relaxation is intended, verdict "question".
 You may adjust severity when the reviewer over- or under-stated it.
 
 Then look for a clearly missed MAJOR or CRITICAL issue in the changed lines, especially in access rules, routing, roles
@@ -52,11 +55,11 @@ var verifySchema = &llm.Schema{
 					"type":     "object",
 					"required": []string{"id", "verdict", "reason"},
 					"properties": map[string]any{
-						"id":       map[string]any{"type": "integer"},
+						"id":         map[string]any{"type": "integer"},
 						"verdict":    map[string]any{"type": "string", "enum": []string{"confirmed", "false_positive", "speculative", "question"}},
 						"reason":     map[string]any{"type": "string"},
 						"confidence": map[string]any{"type": "number"},
-						"severity": map[string]any{"type": "string", "enum": []string{"critical", "major", "minor", "nitpick"}},
+						"severity":   map[string]any{"type": "string", "enum": []string{"critical", "major", "minor", "nitpick"}},
 					},
 				},
 			},

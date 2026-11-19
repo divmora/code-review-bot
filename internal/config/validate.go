@@ -71,6 +71,9 @@ func (c *Config) Check() error {
 	if c.Review.VerifyModel != "" {
 		checkRef("review.verify_model", c.Review.VerifyModel)
 	}
+	if c.Review.Passes < 0 || c.Review.Passes > 3 {
+		errs = append(errs, fmt.Errorf("review.passes %d: want 1, 2 or 3", c.Review.Passes))
+	}
 	switch c.Review.VerifyCanDrop {
 	case "", "confident", "minor", "all":
 	default:
