@@ -1,0 +1,31 @@
+# .github/workflows/code-review.yml
+# Reviews every pull request push. Pick the provider with `model:` and the
+# matching secret; switching provider is a change to those two lines.
+name: AI code review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: code-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: false   # let a running review finish; the next one is incremental
+
+jobs:
+  review:
+    if: ${{ !github.event.pull_request.head.repo.fork }}   # secrets are not available to forks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: divmora/code-review-bot@v0.1.0
+        with:
+          model: anthropic:claude-sonnet-5-5
+          # fail-on: critical
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # OpenAI:  model: openai:<model>      + OPENAI_API_KEY
+          # Gemini:  model: gemini:<model>      + GEMINI_API_KEY
+          # Bedrock: model: bedrock:<model-id>  + AWS credentials (e.g. aws-actions/configure-aws-credentials with OIDC) and AWS_REGION

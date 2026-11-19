@@ -1,0 +1,84 @@
+# codereview.yaml: config for the codereview CLI (locally or in CI/CD).
+# ${VAR} is replaced with the environment variable VAR when the file loads.
+# Model IDs below are placeholders: use any model your account can access.
+
+# Active model: a profile name below, or a "provider:model" spec.
+# Switching provider is a one-line change here, or CODEREVIEW_MODEL=... at runtime.
+model: bedrock
+
+# Tried in order if the active model fails after its retries.
+fallback: [openai]
+
+models:
+  bedrock:
+    provider: bedrock              # AWS Bedrock Converse API (any Bedrock model family)
+    model: <bedrock-model-or-inference-profile-id>   # e.g. us.<model-id> for cross-region profiles
+    region: us-east-1              # credentials come from the AWS chain: env, SSO, IRSA, instance role
+    # aws_profile: review-bot
+
+  openai:
+    provider: openai
+    model: <openai-model>
+    api_key: ${OPENAI_API_KEY}     # optional; OPENAI_API_KEY is read automatically
+
+  anthropic:
+    provider: anthropic
+    model: claude-sonnet-5-5       # ANTHROPIC_API_KEY is read automatically
+
+  gemini:
+    provider: gemini
+    model: <gemini-model>          # GEMINI_API_KEY or GOOGLE_API_KEY
+
+  azure:
+    provider: azure
+    model: <deployment-name>
+    base_url: https://<resource>.openai.azure.com/openai/v1
+    api_key_env: AZURE_OPENAI_API_KEY
+
+  local:
+    provider: ollama               # no key needed; OLLAMA_BASE_URL overrides the host
+    model: qwen2.5-coder:14b
+    timeout: 10m
+
+  gateway:
+    provider: litellm              # or openai-compatible for vLLM, LM Studio, TGI, etc.
+    model: <gateway-model-name>
+    base_url: https://llm-gateway.internal/v1
+    api_key_env: LITELLM_API_KEY
+    structured_output: json_object # json_schema | json_object | prompt
+
+  # Common settings, all optional:
+  #   max_tokens: 8192   temperature: 0.2   timeout: 5m   max_retries: 3
+  #   headers: {X-Team: platform}
+
+# Let repos pick one of the profiles above with `model:` in .codereview.yaml.
+allow_repo_model: false
+
+review:
+  concurrency: 4            # parallel LLM calls per review
+  batch_tokens: 40000       # estimated prompt tokens per LLM call
+  max_files: 150            # larger PRs are not auto-reviewed
+  full_file_max_lines: 800  # files up to this size are sent whole for context
+  context_lines: 60         # larger files: this many lines around each change
+  verify: true              # second pass: drop false positives, ask questions, add missed major issues
+  verify_model: ""          # e.g. "bedrock:moonshotai.kimi-k2.5": a different model family checks better
+  verify_can_drop: minor    # minor (default): disputed major/critical findings become questions; all: drop anything
+  verify_can_add: false     # let the verifier add findings it thinks were missed (unverified; off by default)
+  repo_config_file: .codereview.yaml
+  defaults:                 # same keys as .codereview.yaml; repos override them
+    profile: balanced
+    max_comments: 25
+    path_filters: ["!**/testdata/**"]
+
+github:
+  # A token that can read the PR and post comments. In GitHub Actions the
+  # workflow token works (GITHUB_TOKEN is read automatically).
+  token: ${GITHUB_TOKEN}
+  # GitHub Enterprise Server: api_url: https://ghe.example.com/api/v3
+
+gitlab:
+  - base_url: https://gitlab.com
+    token: ${GITLAB_TOKEN}          # bot user or project/group access token, scope: api
+  - base_url: https://gitlab.internal.example.com
+    token: ${GITLAB_INTERNAL_TOKEN}
+    skip_tls_verify: false          # only for self-signed internal CAs

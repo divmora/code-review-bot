@@ -1,0 +1,20 @@
+# Add to .gitlab-ci.yml. Reviews merge requests on every push.
+# CI/CD variables (masked): GITLAB_TOKEN (bot or project access token with
+# `api` scope; CI_JOB_TOKEN cannot post notes) and the model provider key.
+ai-code-review:
+  stage: test
+  image:
+    name: ghcr.io/divmora/code-review-bot:v0.1.0
+    entrypoint: [""]   # the image entrypoint is the binary; GitLab needs a shell
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    CODEREVIEW_MODEL: "openai:<model>"          # or anthropic:..., gemini:..., bedrock:..., ollama:...
+    # OPENAI_API_KEY: set as a masked CI/CD variable
+  script:
+    # The MR, project and instance are detected from CI_* variables.
+    - codereview review --auto --post --format markdown --output review.md
+  artifacts:
+    when: always
+    paths: [review.md]
+  allow_failure: true

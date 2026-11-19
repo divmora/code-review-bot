@@ -1,0 +1,11 @@
+.git
+bin/
+dist/
+*.out
+coverage.html
+.env
+.env.*
+*.pem
+codereview.yaml
+docs/
+examples/

@@ -1,0 +1,57 @@
+# .codereview.yaml: commit this to the repository's default branch.
+# It is read from the PR's BASE commit, so a pull request cannot loosen
+# the rules it is reviewed under.
+
+# chill: bugs and security only · balanced: + maintainability · assertive: + style and nitpicks
+profile: balanced
+
+# Language of comments and summaries.
+language: English
+
+# Guidance for the whole review.
+instructions: |
+  We use structured logging with log/slog; flag fmt.Println in non-test code.
+  Every exported function needs a doc comment.
+  Database access goes through the repository layer, never from HTTP handlers.
+
+# Extra guidance for matching paths.
+path_instructions:
+  - path: "**/*_test.go"
+    instructions: Prefer table-driven tests. Flag tests that sleep instead of synchronising.
+  - path: "migrations/**"
+    instructions: Migrations must be reversible and safe to run on a live database.
+  - path: "**/*.tsx"
+    instructions: Check accessibility (labels, alt text, keyboard handling).
+
+# Include/exclude files. "!" excludes. With any include pattern, only matches are reviewed.
+# Lockfiles, vendored, generated, minified and binary files are always skipped.
+path_filters:
+  - "!docs/**"
+  - "!**/*.generated.ts"
+
+max_comments: 20
+# min_severity: minor     # critical | major | minor | nitpick
+poem: false
+
+auto_review:
+  enabled: true
+  drafts: false
+  incremental: true                       # on new pushes, review only what changed since the last review
+  base_branches: ["main", "release/*"]    # empty = any base branch
+  ignore_title_keywords: ["WIP", "[skip review]", "DO NOT MERGE"]
+
+# Guideline files read from the target branch (nested AGENTS.md files in the
+# changed folders are included too). Default list shown.
+guidelines:
+  enabled: true
+  files: [AGENTS.md, CLAUDE.md, .github/copilot-instructions.md, .cursorrules]
+
+# PR description and title (CodeRabbit-compatible keys); applied with --post.
+high_level_summary: true                     # append "Summary by codereview" to the description
+# high_level_summary_placeholder: "@codereview summary"
+# high_level_summary_instructions: "Group by module; mention migrations."
+# auto_title_placeholder: "@codereview"      # in the title -> replaced with a generated title
+# auto_title_instructions: "Prefix with the Jira key, e.g. PROJ-123."
+
+# Pick one of the operator's model profiles (only if they set allow_repo_model).
+# model: anthropic

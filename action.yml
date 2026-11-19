@@ -1,0 +1,63 @@
+name: AI Code Review
+description: Review pull requests with any LLM provider (OpenAI, Anthropic, Gemini, Bedrock, Ollama, ...)
+author: DIVMORA Technologies
+branding:
+  icon: eye
+  color: purple
+
+inputs:
+  model:
+    description: Model profile or provider:model spec (e.g. anthropic:claude-sonnet-5-5, bedrock:<model-id>)
+    required: false
+  config:
+    description: Path to a codereview.yaml with model profiles
+    required: false
+  post:
+    description: Publish inline comments and the summary to the pull request
+    required: false
+    default: "true"
+  fail-on:
+    description: Fail the job when a finding is at least this severe (critical, major, minor, nitpick)
+    required: false
+  full:
+    description: Ignore previous reviews and review every file
+    required: false
+    default: "false"
+  version:
+    description: code-review-bot version to install (defaults to the action ref)
+    required: false
+  github-token:
+    description: Token used to read the PR and post comments
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version: "1.26"
+        cache: false
+    - name: Install codereview
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version || github.action_ref || 'latest' }}
+      run: go install "github.com/divmora/code-review-bot/cmd/codereview@${VERSION}"
+    - name: Review
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        MODEL: ${{ inputs.model }}
+        CONFIG: ${{ inputs.config }}
+        POST: ${{ inputs.post }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        FULL: ${{ inputs.full }}
+      run: |
+        args=(review --auto)
+        [ -n "$MODEL" ] && args+=(--model "$MODEL")
+        [ -n "$CONFIG" ] && args+=(--config "$CONFIG")
+        [ "$POST" = "true" ] && args+=(--post)
+        [ "$FULL" = "true" ] && args+=(--full)
+        [ -n "$FAIL_ON" ] && args+=(--fail-on "$FAIL_ON")
+        codereview "${args[@]}" --format markdown --output "$RUNNER_TEMP/review.md"
+        cat "$RUNNER_TEMP/review.md" >> "$GITHUB_STEP_SUMMARY"
