@@ -25,9 +25,10 @@ type Config struct {
 	// named profiles. Specs (provider:model) from repos are never honoured.
 	AllowRepoModel bool `yaml:"allow_repo_model"`
 
-	Review Review   `yaml:"review"`
-	GitHub GitHub   `yaml:"github"`
-	GitLab []GitLab `yaml:"gitlab"`
+	Review    Review    `yaml:"review"`
+	GitHub    GitHub    `yaml:"github"`
+	GitLab    []GitLab  `yaml:"gitlab"`
+	Bitbucket Bitbucket `yaml:"bitbucket"`
 	// BotName is the mention handle for chat commands (@<bot_name> review).
 	BotName string `yaml:"bot_name"`
 }
@@ -77,6 +78,16 @@ type GitHub struct {
 	PrivateKeyFile string `yaml:"private_key_file"`
 	PrivateKey     string `yaml:"private_key"`
 	WebhookSecret  string `yaml:"webhook_secret"`
+}
+
+// Bitbucket configures Bitbucket Cloud (bitbucket.org). Use an access token
+// (repository, project or workspace; Bearer) or an Atlassian API token with
+// the account email (Basic). App passwords are being retired by Atlassian.
+type Bitbucket struct {
+	APIURL   string `yaml:"api_url"` // default https://api.bitbucket.org/2.0
+	Token    string `yaml:"token"`
+	Email    string `yaml:"email"`
+	APIToken string `yaml:"api_token"`
 }
 
 // GitLab configures one GitLab instance (gitlab.com or self-managed).
@@ -154,6 +165,15 @@ func (c *Config) applyEnv() {
 	}
 	if c.GitHub.Token == "" {
 		c.GitHub.Token = os.Getenv("GITHUB_TOKEN")
+	}
+	if c.Bitbucket.Token == "" {
+		c.Bitbucket.Token = os.Getenv("BITBUCKET_TOKEN")
+	}
+	if c.Bitbucket.Email == "" {
+		c.Bitbucket.Email = os.Getenv("BITBUCKET_EMAIL")
+	}
+	if c.Bitbucket.APIToken == "" {
+		c.Bitbucket.APIToken = os.Getenv("BITBUCKET_API_TOKEN")
 	}
 	if c.GitHub.WebhookSecret == "" {
 		c.GitHub.WebhookSecret = os.Getenv("GITHUB_WEBHOOK_SECRET")

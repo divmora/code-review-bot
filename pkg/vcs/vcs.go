@@ -193,6 +193,10 @@ func staleScoreLabels(current []string, scores []ScoreLabel, label func(string, 
 // SuggestionFence returns the opening fence for a committable suggestion
 // that replaces lines start..end on the platform.
 func SuggestionFence(platform string, start, end int) string {
+	if platform == Bitbucket {
+		// No committable-suggestion syntax on Bitbucket Cloud: show the code.
+		return "**Suggested change:**\n```"
+	}
 	if platform == GitLab {
 		above := 0
 		if start > 0 && start < end {
@@ -268,11 +272,15 @@ func ParseURL(raw string) (Ref, error) {
 		n, _ := strconv.Atoi(m[2])
 		return Ref{Platform: GitLab, Host: u.Host, Repo: m[1], Number: n}, nil
 	}
+	if m := bbPRPath.FindStringSubmatch(u.Path); m != nil && (u.Host == "bitbucket.org" || u.Host == "www.bitbucket.org") {
+		n, _ := strconv.Atoi(m[3])
+		return Ref{Platform: Bitbucket, Host: "bitbucket.org", Repo: m[1] + "/" + m[2], Number: n}, nil
+	}
 	if m := ghPR.FindStringSubmatch(u.Path); m != nil {
 		n, _ := strconv.Atoi(m[3])
 		return Ref{Platform: GitHub, Host: u.Host, Repo: m[1] + "/" + m[2], Number: n}, nil
 	}
-	return Ref{}, fmt.Errorf("unrecognised PR/MR URL %q (want .../owner/repo/pull/N or .../group/project/-/merge_requests/N)", raw)
+	return Ref{}, fmt.Errorf("unrecognised PR/MR URL %q (want .../owner/repo/pull/N, .../group/project/-/merge_requests/N or bitbucket.org/workspace/repo/pull-requests/N)", raw)
 }
 
 // ---- shared REST helper ----

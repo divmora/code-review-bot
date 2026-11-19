@@ -24,7 +24,7 @@ Active, assigned work belongs in GitHub Issues instead.
 
 ## Platforms
 
-- [ ] **Bitbucket Cloud and Data Center**.
+- [ ] **Bitbucket Data Center** (self-hosted, REST API 1.0). Bitbucket Cloud is supported.
 - [ ] **Azure DevOps** pull requests.
 - [ ] **Google Vertex AI** (Gemini and partner models with service-account auth).
 - [ ] **Native GitHub Action release binaries** instead of `go install` in the action.

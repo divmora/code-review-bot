@@ -7,11 +7,11 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/divmora/code-review-bot)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-green.svg)](SECURITY.md)
 
-AI code review for **GitHub** and **GitLab** that works with **any LLM provider**: OpenAI, Anthropic, Google Gemini, AWS Bedrock, Azure OpenAI, Ollama, OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, LiteLLM or any OpenAI-compatible server. Switching provider is a one-line config change.
+AI code review for **GitHub**, **GitLab** and **Bitbucket Cloud** that works with **any LLM provider**: OpenAI, Anthropic, Google Gemini, AWS Bedrock, Azure OpenAI, Ollama, OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, LiteLLM or any OpenAI-compatible server. Switching provider is a one-line config change.
 
 Each run reviews **one** pull/merge request, or your local changes:
 
-- **CI/CD**: a GitHub Action or GitLab CI job reviews every push to a PR. There's no server to host.
+- **CI/CD**: a GitHub Action, GitLab CI job or Bitbucket Pipelines step reviews every push to a PR. There's no server to host.
 - **CLI**: review a PR/MR by URL, or your uncommitted changes before you push.
 
 For webhook-driven reviews across many repositories, with a queue, chat commands (`@codereview ...`), SSO, a repository allowlist, history and dashboards, use **Divmora Code Review Console**, which runs this CLI as its review engine through local, Docker or Kubernetes executors.
@@ -102,6 +102,8 @@ Every response is also parsed leniently (fenced or prose-wrapped JSON), so weake
 
 **GitLab CI**: see [`examples/gitlab-ci.yml`](examples/gitlab-ci.yml). The MR is detected from `CI_*` variables; set `GITLAB_TOKEN` (`api` scope) and your provider key as masked variables.
 
+**Bitbucket Pipelines**: see [`examples/bitbucket-pipelines.yml`](examples/bitbucket-pipelines.yml). The PR is detected from `BITBUCKET_PR_ID`, `BITBUCKET_WORKSPACE` and `BITBUCKET_REPO_SLUG`.
+
 `--auto` applies the repo's `auto_review` rules (drafts, title keywords, base branches). `--fail-on <severity>` exits with code 3 so you can gate merges. `--format sarif` produces output for code-scanning dashboards.
 
 ## Use from another program
@@ -132,6 +134,21 @@ A second, skeptical **verification pass** (`review.verify`, on by default; one e
 - it turns findings that depend on data or configuration into **❓ questions** for the author;
 - with `verify_can_add`, it may add a clearly missed major issue, which still has to pass the same diff validation.
 The summary reports what the pass changed.
+
+## Bitbucket Cloud
+
+Review `https://bitbucket.org/<workspace>/<repo>/pull-requests/<id>` like any other PR. Two kinds of credential work:
+- a **repository, project or workspace access token** in `BITBUCKET_TOKEN`, with Pull requests: Write and Repositories: Read;
+- an **Atlassian API token** in `BITBUCKET_API_TOKEN`, with your account email in `BITBUCKET_EMAIL`. (Atlassian is retiring app passwords.)
+
+The differences from GitHub and GitLab:
+- Bitbucket has no PR labels, so `--score-labels` is skipped. The scores still appear in the summary and in the build status.
+- There are no comment reactions.
+- Suggestions are shown as a "Suggested change" code block, since there's no one-click apply.
+- `--commit-status` sets a Bitbucket **build status** (`codereview`).
+- Bitbucket's Markdown has no HTML, so the bot's hidden markers are written as invisible link references and collapsible sections as bold headings.
+
+Bitbucket Data Center (self-hosted) uses a different API and isn't supported yet.
 
 ## New commits and repeat runs
 

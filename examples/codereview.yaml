@@ -76,6 +76,10 @@ github:
   token: ${GITHUB_TOKEN}
   # GitHub Enterprise Server: api_url: https://ghe.example.com/api/v3
 
+bitbucket:                          # Bitbucket Cloud
+  token: ${BITBUCKET_TOKEN}         # repository/project/workspace access token (Bearer)
+  # or an Atlassian API token: email: you@example.com, api_token: ${BITBUCKET_API_TOKEN}
+
 gitlab:
   - base_url: https://gitlab.com
     token: ${GITLAB_TOKEN}          # bot user or project/group access token, scope: api

@@ -1,0 +1,21 @@
+# bitbucket-pipelines.yml: review every pull request with code-review-bot.
+# Repository variables (secured): BITBUCKET_TOKEN (a repository access token
+# with Pull requests: Write and Repositories: Read) and your model's key,
+# e.g. OPENAI_API_KEY or ANTHROPIC_API_KEY.
+image: atlassian/default-image:4
+
+pipelines:
+  pull-requests:
+    '**':
+      - step:
+          name: AI code review
+          script:
+            - VERSION=0.3.0
+            - curl -fsSL -o crb.tgz "https://github.com/divmora/code-review-bot/releases/download/v${VERSION}/code-review-bot_${VERSION}_linux_amd64.tar.gz"
+            - tar -xzf crb.tgz codereview && rm crb.tgz
+            # The PR, workspace and repository come from BITBUCKET_PR_ID,
+            # BITBUCKET_WORKSPACE and BITBUCKET_REPO_SLUG.
+            - export CODEREVIEW_MODEL="openai:<model>"   # or anthropic:..., gemini:..., bedrock:...
+            - ./codereview review --auto --post --commit-status --format markdown --output review.md
+          artifacts:
+            - review.md

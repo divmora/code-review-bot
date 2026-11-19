@@ -28,7 +28,7 @@ import (
 	"github.com/divmora/code-review-bot/pkg/vcs"
 )
 
-const usage = `codereview — AI code review for GitHub and GitLab with any LLM provider
+const usage = `codereview — AI code review for GitHub, GitLab and Bitbucket with any LLM provider
 
 Usage:
   codereview review [PR_URL] [flags]   Review a pull/merge request (or local changes with --local)
@@ -135,7 +135,7 @@ func cmdReview(ctx context.Context, args []string) error {
 	commitStatus := fs.Bool("commit-status", false, "with --post: set a \"codereview\" status on the reviewed commit (running, then success/failed)")
 	verifyModel := fs.String("verify-model", "", "model for the verification pass (profile or provider:model); default review.verify_model or the review model")
 	fs.Usage = func() {
-		_, _ = fmt.Fprintf(fs.Output(), "Usage: codereview review [PR_URL] [flags]\n\nWithout PR_URL, the PR is detected from GitHub Actions or GitLab CI, or use --local.\n\n")
+		_, _ = fmt.Fprintf(fs.Output(), "Usage: codereview review [PR_URL] [flags]\n\nWithout PR_URL, the PR is detected from GitHub Actions, GitLab CI or Bitbucket Pipelines, or use --local.\n\n")
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(reorder(args))
@@ -184,7 +184,7 @@ func cmdReview(ctx context.Context, args []string) error {
 		var ok bool
 		if ref, ok = refFromCI(); !ok {
 			fs.Usage()
-			return errors.New("no PR given: pass a PR/MR URL, use --local, or run inside a GitHub Actions pull_request job or a GitLab merge request pipeline")
+			return errors.New("no PR given: pass a PR/MR URL, use --local, or run inside a GitHub Actions pull_request job, a GitLab merge request pipeline or a Bitbucket pull-request pipeline")
 		}
 		logger.Info("detected pull request from CI", "pr", ref.String())
 	}
@@ -409,7 +409,7 @@ func overridesFromEnv(cfg *config.Config) (*config.Overrides, error) {
 	return &ov, nil
 }
 
-// refFromCI detects the PR in GitHub Actions or GitLab CI.
+// refFromCI detects the PR in GitHub Actions, GitLab CI or Bitbucket Pipelines.
 func refFromCI() (vcs.Ref, bool) {
 	if os.Getenv("GITHUB_ACTIONS") == "true" {
 		if p := os.Getenv("GITHUB_EVENT_PATH"); p != "" {
@@ -441,6 +441,14 @@ func refFromCI() (vcs.Ref, bool) {
 					}
 				}
 			}
+		}
+	}
+	// Bitbucket Pipelines (pull-request pipelines set BITBUCKET_PR_ID).
+	if id := os.Getenv("BITBUCKET_PR_ID"); id != "" {
+		n, err := strconv.Atoi(id)
+		ws, slug := os.Getenv("BITBUCKET_WORKSPACE"), os.Getenv("BITBUCKET_REPO_SLUG")
+		if err == nil && ws != "" && slug != "" {
+			return vcs.Ref{Platform: vcs.Bitbucket, Host: "bitbucket.org", Repo: ws + "/" + slug, Number: n}, true
 		}
 	}
 	if iid := os.Getenv("CI_MERGE_REQUEST_IID"); iid != "" {

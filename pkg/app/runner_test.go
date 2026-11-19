@@ -374,3 +374,69 @@ func TestCommitStatusLifecycle(t *testing.T) {
 		t.Errorf("failed review statuses = %v", gh2.statuses)
 	}
 }
+
+func TestBitbucketEndToEnd(t *testing.T) {
+	llmSrv, _ := fakeLLM(t, `{"files":[{"path":"app.go","summary":"A panics."}],"comments":[{"path":"app.go","start_line":4,"end_line":4,"severity":"major","category":"bug","title":"panic in library code","body":"Return an error.","suggestion":"\treturn errors.New(\"todo\")","confidence":0.9}]}`)
+	var mu sync.Mutex
+	var comments, puts, statuses []map[string]any
+	bb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		p := r.URL.Path
+		switch {
+		case r.Method == "GET" && p == "/repositories/acme/web/pullrequests/7":
+			_, _ = io.WriteString(w, `{"title":"Add A","description":"adds A","source":{"branch":{"name":"feat"},"commit":{"hash":"1111111111111111111111111111111111111111"}},"destination":{"branch":{"name":"main"},"commit":{"hash":"2222222222222222222222222222222222222222"}},"author":{"nickname":"dev"},"links":{"html":{"href":"https://bitbucket.org/acme/web/pull-requests/7"}}}`)
+		case r.Method == "GET" && p == "/repositories/acme/web/pullrequests/7/diff":
+			_, _ = io.WriteString(w, "diff --git a/app.go b/app.go\n--- a/app.go\n+++ b/app.go\n"+appPatch)
+		case r.Method == "GET" && strings.HasPrefix(p, "/repositories/acme/web/src/"):
+			if strings.HasSuffix(p, "/app.go") {
+				_, _ = io.WriteString(w, "package app\n\nfunc A() {\n\tpanic(\"todo\")\n}\n// trailing\n")
+				return
+			}
+			w.WriteHeader(404)
+		case r.Method == "GET" && p == "/repositories/acme/web/pullrequests/7/comments":
+			_, _ = io.WriteString(w, `{"values":[]}`)
+		case r.Method == "POST" && p == "/repositories/acme/web/pullrequests/7/comments":
+			comments = append(comments, body)
+			_, _ = io.WriteString(w, `{"id":1}`)
+		case r.Method == "PUT" && p == "/repositories/acme/web/pullrequests/7":
+			puts = append(puts, body)
+			_, _ = io.WriteString(w, `{}`)
+		case r.Method == "POST" && strings.HasSuffix(p, "/statuses/build"):
+			statuses = append(statuses, body)
+			_, _ = io.WriteString(w, `{}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL)
+			w.WriteHeader(404)
+		}
+	}))
+	defer bb.Close()
+
+	r := newRunner(t, llmSrv.URL)
+	client := vcs.NewBitbucket(bb.URL, vcs.BitbucketAuth{Token: "t"})
+	ref := vcs.Ref{Platform: vcs.Bitbucket, Host: "bitbucket.org", Repo: "acme/web", Number: 7}
+	out, err := r.Review(context.Background(), client, ref, Options{Post: true, CommitStatus: true, ScoreLabels: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Posted != 1 || len(comments) != 2 {
+		t.Fatalf("posted=%d comments=%d", out.Posted, len(comments))
+	}
+	inline := comments[0]
+	raw := inline["content"].(map[string]any)["raw"].(string)
+	if inline["inline"].(map[string]any)["path"] != "app.go" || !strings.Contains(raw, "**Suggested change:**") || strings.Contains(raw, "```suggestion") {
+		t.Errorf("inline comment = %v", inline)
+	}
+	summary := comments[1]["content"].(map[string]any)["raw"].(string)
+	if !strings.HasPrefix(summary, "[//]: # (codereview:summary)") || strings.Contains(summary, "<details>") {
+		t.Errorf("summary not converted for Bitbucket:\n%s", summary)
+	}
+	if len(puts) != 1 || puts[0]["title"] != "Add A" || !strings.Contains(puts[0]["description"].(string), "[//]: # (codereview:description:start)") {
+		t.Errorf("description update = %v", puts)
+	}
+	if len(statuses) != 2 || statuses[0]["state"] != "INPROGRESS" || statuses[1]["state"] != "SUCCESSFUL" {
+		t.Errorf("build statuses = %v", statuses)
+	}
+}

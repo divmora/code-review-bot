@@ -419,6 +419,9 @@ func (r *Runner) ClientFor(ref vcs.Ref) (vcs.Client, error) {
 			api = "https://" + ref.Host + "/api/v3" // GitHub Enterprise Server
 		}
 		return vcs.NewGitHub(api, vcs.StaticToken(r.Cfg.GitHub.Token)), nil
+	case vcs.Bitbucket:
+		b := r.Cfg.Bitbucket
+		return vcs.NewBitbucket(b.APIURL, vcs.BitbucketAuth{Token: b.Token, Email: b.Email, APIToken: b.APIToken}), nil
 	case vcs.GitLab:
 		gl, ok := r.Cfg.GitLabFor(ref.Host)
 		if !ok {

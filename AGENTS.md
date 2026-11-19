@@ -10,7 +10,8 @@ cmd/codereview/   CLI: review (one PR per run), ask, models, ping, version
 pkg/llm/          provider-neutral LLM client + providers (openai*, anthropic, gemini, bedrock)
 pkg/diff/         unified diff parser, commentable-line logic, annotated rendering
 pkg/config/       engine config (models, code hosts, limits), .codereview.yaml, Overrides, globs
-pkg/vcs/          code hosts: GitHub (token or App), GitLab, local git; bot-state markers
+pkg/vcs/          code hosts: GitHub (token or App), GitLab, Bitbucket Cloud, local git; bot-state
+                  markers (Bitbucket gets them as Markdown link references: no HTML there)
 pkg/review/       engine: filtering, secret scan, batching, prompts, validation, ranking, rendering
 pkg/app/          Runner: the review/ask flow
 internal/version  build version
