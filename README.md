@@ -55,6 +55,35 @@ codereview ask https://github.com/org/repo/pull/123 "Is the retry loop safe unde
 
 Nothing is written to a PR unless you pass `--post`.
 
+Prebuilt binaries for Linux, macOS and Windows are on the [Releases](https://github.com/divmora/code-review-bot/releases) page. There's also a Docker image whose entrypoint is the `codereview` binary:
+
+<!-- x-release-please-start-version -->
+```bash
+docker run --rm -e CODEREVIEW_MODEL -e ANTHROPIC_API_KEY -e GITHUB_TOKEN \
+  ghcr.io/divmora/code-review-bot:0.4.0 review https://github.com/org/repo/pull/123
+
+# local changes: mount the repository at /workspace
+docker run --rm -v "$PWD:/workspace" -e CODEREVIEW_MODEL -e ANTHROPIC_API_KEY \
+  ghcr.io/divmora/code-review-bot:0.4.0 review --local
+```
+<!-- x-release-please-end -->
+
+## How it works
+
+```
+ PR diff + description + .codereview.yaml (from the target branch)
+   │
+   ├─ 1. pick up where the last run stopped (state is kept in the bot's own PR comment)
+   ├─ 2. skip lockfiles, generated, vendored and binary files; scan added lines for secrets
+   ├─ 3. build token-budgeted batches: small files whole, large ones as excerpts around changes
+   ├─ 4. review the batches in parallel (structured output, retries, fallback models)
+   ├─ 5. drop every comment that isn't on a line the PR changed
+   ├─ 6. verification pass: remove false positives, turn uncertain findings into questions
+   └─ 7. with --post: inline comments, walkthrough summary, scores, labels, commit status
+```
+
+The model only proposes findings; the deterministic checks in steps 2 and 5 decide what can be posted.
+
 ## Switching providers
 
 Choose the model in order of precedence: `--model` flag, `CODEREVIEW_MODEL` env var, then `model:` in `codereview.yaml`. The value is a **profile name** from the config or a direct **`provider:model`** spec. Only the first colon separates the two, so `bedrock:anthropic.x-v1:0` and `ollama:qwen2.5-coder:14b` work.
@@ -109,6 +138,18 @@ Every response is also parsed leniently (fenced or prose-wrapped JSON), so weake
 **Bitbucket Pipelines**: see [`examples/bitbucket-pipelines.yml`](examples/bitbucket-pipelines.yml). The PR is detected from `BITBUCKET_PR_ID`, `BITBUCKET_WORKSPACE` and `BITBUCKET_REPO_SLUG`.
 
 `--auto` applies the repo's `auto_review` rules (drafts, title keywords, base branches). `--fail-on <severity>` exits with code 3 so you can gate merges. `--format sarif` produces output for code-scanning dashboards.
+
+Tips for CI:
+- **Keep it advisory.** The GitLab example sets `allow_failure: true` so a provider outage never blocks a pipeline. Add `--fail-on critical` only when you want the review to gate merges.
+- **Drafts are skipped** with `--auto` unless `auto_review.drafts: true`. So are closed PRs and commits that were already reviewed.
+- **Self-managed GitLab** is detected from `CI_SERVER_URL` (or `GITLAB_URL`). If it uses a private CA, add the CA to the image or point `SSL_CERT_FILE` at it. As a last resort, set `skip_tls_verify` for that instance in `codereview.yaml`:
+
+  ```yaml
+  gitlab:
+    - base_url: https://gitlab.internal.example.com
+      token: ${GITLAB_TOKEN}
+      skip_tls_verify: true   # only for self-signed certificates you can't install
+  ```
 
 ## Use from another program
 
@@ -231,6 +272,16 @@ auto_review:
   ignore_title_keywords: ["WIP", "[skip review]"]
 ```
 
+### Review profiles
+
+| Profile | Reports |
+|---|---|
+| `chill` | Likely bugs, security problems, data loss and serious performance issues only. No style or naming points. |
+| `balanced` (default) | Bugs, security and performance, plus maintainability problems that will clearly cause trouble. Skips pure style preferences. |
+| `assertive` | Everything above, plus readability, naming, missing tests and documentation gaps. Small polish items are marked as nitpicks. |
+
+Set it in `.codereview.yaml` or with `--profile`. The profile also sets the default minimum severity and confidence for posted comments.
+
 ## CLI reference
 
 | Command | Purpose |
@@ -254,6 +305,12 @@ make lint
 ```
 
 Architecture and contributor notes are in [AGENTS.md](AGENTS.md); planned work is in [ROADMAP.md](ROADMAP.md).
+
+## Contributing
+
+- **Contributions:** see [CONTRIBUTING.md](CONTRIBUTING.md) for pull requests and issues.
+- **Code of Conduct:** [Divmora Code of Conduct](https://github.com/divmora/.github/blob/main/CODE_OF_CONDUCT.md), inherited from the organisation.
+- **Security:** report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
