@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code Review Bot — AI code review for GitHub, GitLab and Bitbucket</title>
+<meta name="description" content="Open-source AI code review for GitHub, GitLab and Bitbucket Cloud that works with any LLM provider: OpenAI, Anthropic, Gemini, AWS Bedrock, Ollama and more. CLI, GitHub Action, GitLab CI and Bitbucket Pipelines.">
+<meta property="og:title" content="Code Review Bot by Divmora">
+<meta property="og:description" content="AI code review for GitHub, GitLab and Bitbucket with any LLM provider. Apache 2.0.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://divmora.github.io/code-review-bot/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%237c6cff'/><path d='M10 12l-4 4 4 4M22 12l4 4-4 4M18 9l-4 14' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<style>
+:root {
+  --bg: #0b0b10; --bg-soft: #111118; --panel: #15151d; --panel-2: #1b1b25; --line: #262633;
+  --text: #ececf3; --muted: #9b9bab; --faint: #6d6d7d;
+  --accent: #8b7dff; --accent-2: #5ee0c1; --accent-ink: #0b0b10;
+  --ok: #4cc584; --warn: #e8a33d; --bad: #f07067; --info: #6ea2ff;
+  --code-bg: #0f0f15; --shadow: 0 20px 60px rgba(0,0,0,.35);
+  --radius: 14px; --max: 1120px;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #fbfbfd; --bg-soft: #f4f4f8; --panel: #ffffff; --panel-2: #f6f6fa; --line: #e5e5ee;
+    --text: #17171f; --muted: #5d5d6e; --faint: #8a8a99;
+    --accent: #5b4fd6; --accent-2: #0e9f80; --accent-ink: #ffffff;
+    --ok: #1f8a4c; --warn: #b26a00; --bad: #c4352b; --info: #2f6fd1;
+    --code-bg: #f6f6fa; --shadow: 0 18px 50px rgba(30,30,60,.10);
+  }
+}
+:root[data-theme="light"] {
+  --bg: #fbfbfd; --bg-soft: #f4f4f8; --panel: #ffffff; --panel-2: #f6f6fa; --line: #e5e5ee;
+  --text: #17171f; --muted: #5d5d6e; --faint: #8a8a99;
+  --accent: #5b4fd6; --accent-2: #0e9f80; --accent-ink: #ffffff;
+  --ok: #1f8a4c; --warn: #b26a00; --bad: #c4352b; --info: #2f6fd1;
+  --code-bg: #f6f6fa; --shadow: 0 18px 50px rgba(30,30,60,.10);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+body { margin: 0; overflow-x: clip; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+:not(pre) > code { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: .08em .38em; font-size: .88em; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 20px; }
+svg.i { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* nav */
+header.nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+.nav .wrap { display: flex; align-items: center; gap: 22px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.brand:hover { text-decoration: none; }
+.logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: grid; place-items: center; color: #fff; }
+.logo svg { width: 16px; height: 16px; stroke: #fff; }
+.nav nav { display: flex; gap: 18px; margin-left: auto; font-size: 14px; }
+.nav nav a { color: var(--muted); }
+.nav nav a:hover { color: var(--text); text-decoration: none; }
+.theme { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; width: 34px; height: 34px; display: grid; place-items: center; cursor: pointer; }
+@media (max-width: 760px) { .nav nav a.hide-sm { display: none; } .nav .wrap { gap: 14px; } }
+@media (max-width: 420px) { .nav nav a[href="#cli"] { display: none; } }
+
+/* hero */
+.hero { padding: 76px 0 40px; position: relative; overflow: hidden; }
+.hero::before { content: ""; position: absolute; inset: -200px -10% auto; height: 520px; background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 24%, transparent), transparent 70%); pointer-events: none; }
+.hero .wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 44px; align-items: center; }
+.hero .wrap > * { min-width: 0; }
+@media (max-width: 920px) { .hero .wrap { grid-template-columns: minmax(0, 1fr); } }
+.pill { display: inline-block; line-height: 1.5; font-size: 13px; color: var(--muted); border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 12px; }
+.pill b { color: var(--accent-2); font-weight: 600; }
+h1 { font-size: clamp(34px, 5vw, 54px); line-height: 1.08; letter-spacing: -.025em; margin: 18px 0 16px; }
+h1 .grad { background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lead { font-size: 18px; color: var(--muted); max-width: 560px; margin: 0 0 26px; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 10px; font-weight: 600; font-size: 15px; border: 1px solid var(--line); color: var(--text); background: var(--panel); }
+.btn:hover { text-decoration: none; border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.install { margin-top: 22px; display: flex; align-items: center; gap: 10px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; max-width: 560px; }
+.install code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; color: var(--text); }
+.install .dollar { color: var(--faint); user-select: none; }
+
+/* review mock */
+.mock { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; font-size: 14px; }
+.mock .bar { display: flex; gap: 6px; padding: 11px 14px; border-bottom: 1px solid var(--line); background: var(--panel-2); align-items: center; color: var(--faint); font-size: 12px; }
+.mock .bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: inline-block; }
+.mock .bar span { margin-left: 8px; }
+.diff { font-family: "JetBrains Mono", monospace; font-size: 12.5px; background: var(--code-bg); }
+.diff div { padding: 1px 14px; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.diff .ln { color: var(--faint); display: inline-block; width: 30px; }
+.diff .add { background: color-mix(in srgb, var(--ok) 13%, transparent); }
+.diff .del { background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.comment { margin: 10px 14px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.comment .who { display: flex; gap: 8px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.comment .who .av { width: 20px; height: 20px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.comment .who b { color: var(--text); }
+.comment .body { padding: 10px 12px 12px; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; margin-right: 6px; }
+.t-major { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.t-cat { color: var(--info); background: color-mix(in srgb, var(--info) 15%, transparent); }
+.comment h4 { margin: 8px 0 4px; font-size: 14px; }
+.comment p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.sugg { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-family: "JetBrains Mono", monospace; font-size: 12px; }
+.sugg .h { padding: 5px 10px; background: var(--panel-2); color: var(--faint); font-family: Inter, sans-serif; font-size: 12px; display: flex; justify-content: space-between; }
+.sugg .h b { color: var(--ok); font-weight: 600; }
+.scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 14px 14px; }
+.score { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--panel-2); }
+.score .n { font-size: 20px; font-weight: 700; }
+.score .l { font-size: 11.5px; color: var(--faint); }
+.g { color: var(--ok); } .o { color: var(--warn); } .r { color: var(--bad); }
+
+/* sections */
+section { padding: 64px 0; }
+section.alt { background: var(--bg-soft); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.eyebrow { color: var(--accent-2); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+h2 { font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -.02em; margin: 8px 0 10px; line-height: 1.15; }
+.sub { color: var(--muted); max-width: 680px; margin: 0 0 32px; }
+h3 { font-size: 17px; margin: 0 0 6px; }
+.grid { display: grid; gap: 16px; }
+.grid > * { min-width: 0; }
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g1 { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 920px) { .g3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .g3, .g2 { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.card .ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); margin-bottom: 12px; }
+
+/* code blocks + tabs */
+.codeblock { position: relative; background: var(--code-bg); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.codeblock .ttl { font-size: 12.5px; color: var(--faint); padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel-2); display: flex; justify-content: space-between; align-items: center; }
+pre { margin: 0; padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.6; color: var(--text); }
+.copy { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 7px; font: 12px Inter, sans-serif; padding: 3px 9px; cursor: pointer; }
+.copy:hover { color: var(--text); border-color: var(--accent); }
+.c { color: var(--faint); } .k { color: var(--accent); } .s { color: var(--accent-2); }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.tabs button { background: var(--panel); border: 1px solid var(--line); color: var(--muted); border-radius: 9px; padding: 8px 14px; font: 600 14px Inter, sans-serif; cursor: pointer; }
+.tabs button[aria-selected="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.tabpanel[hidden] { display: none; }
+
+/* providers */
+.providers { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 26px; }
+.prov { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 7px 14px; font-size: 14px; font-weight: 500; }
+.prov small { color: var(--faint); font-weight: 400; margin-left: 4px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--faint); font-weight: 500; font-size: 13px; }
+td code { white-space: nowrap; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.tablewrap tr:last-child td { border-bottom: 0; }
+
+ul.check { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+ul.check li { display: flex; gap: 10px; color: var(--muted); font-size: 15px; }
+ul.check li svg { color: var(--accent-2); margin-top: 3px; }
+ul.check b { color: var(--text); font-weight: 600; }
+
+.console { display: flex; gap: 24px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, var(--panel)), var(--panel)); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; }
+.console p { color: var(--muted); margin: 6px 0 0; max-width: 640px; }
+footer { padding: 36px 0 48px; color: var(--faint); font-size: 14px; border-top: 1px solid var(--line); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; }
+footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+  <symbol id="i-git" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M6 9v6a3 3 0 003 3h6M18 15V9"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 2l10 6-10 6L2 8l10-6z"/><path d="M2 16l10 6 10-6"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1117.4 0"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V3H6.5A2.5 2.5 0 004 5.5v14z"/><path d="M20 17v4H6.5A2.5 2.5 0 014 18.5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></symbol>
+  <symbol id="i-gh" viewBox="0 0 24 24"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 00-1.3-3.2 4.2 4.2 0 00-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 00-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 00-.1 3.2A4.6 4.6 0 004 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+</svg>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><span class="logo"><svg class="i"><use href="#i-code"/></svg></span>Code Review Bot</a>
+    <nav>
+      <a href="#features" class="hide-sm">Features</a>
+      <a href="#models" class="hide-sm">Models</a>
+      <a href="#ci">CI/CD</a>
+      <a href="#config" class="hide-sm">Config</a>
+      <a href="#cli">CLI</a>
+      <a href="https://github.com/divmora/code-review-bot">GitHub</a>
+    </nav>
+    <button class="theme" id="theme" title="Toggle light/dark" aria-label="Toggle light or dark theme"><svg class="i"><use href="#i-sun"/></svg></button>
+  </div>
+</header>
+
+<main id="top">
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <span class="pill">Open source · <b>Apache 2.0</b> · GitHub, GitLab, Bitbucket</span>
+      <h1>AI code review that works with <span class="grad">any model</span>.</h1>
+      <p class="lead">Inline review comments, one-click suggestions, a walkthrough of every pull request and quality scores, using OpenAI, Anthropic, Gemini, AWS Bedrock, Ollama or your own gateway. Runs from the command line or in CI, with no server to host.</p>
+      <div class="cta">
+        <a class="btn primary" href="#quickstart">Get started <svg class="i"><use href="#i-arrow"/></svg></a>
+        <a class="btn" href="https://github.com/divmora/code-review-bot"><svg class="i"><use href="#i-gh"/></svg> View on GitHub</a>
+        <a class="btn" href="https://github.com/divmora/code-review-bot/releases">Releases</a>
+      </div>
+      <div class="install"><span class="dollar">$</span><code id="install-cmd">go install github.com/divmora/code-review-bot/cmd/codereview@latest</code><button class="copy" data-copy="install-cmd">Copy</button></div>
+    </div>
+
+    <div class="mock" aria-label="Example review comment">
+      <div class="bar"><i></i><i></i><i></i><span>store/store.go · Pull request #42</span></div>
+      <div class="diff">
+        <div><span class="ln">36</span> func (s *Store) Search(ctx, customer string) ([]Order, error) {</div>
+        <div class="del"><span class="ln"></span>-  rows, err := s.db.Query(ctx, q, customer)</div>
+        <div class="add"><span class="ln">38</span>+  q := fmt.Sprintf("... WHERE customer = '%s'", customer)</div>
+        <div class="add"><span class="ln">39</span>+  rows, err := s.db.QueryContext(ctx, q)</div>
+      </div>
+      <div class="comment">
+        <div class="who"><span class="av"></span><b>codereview</b> reviewed 2 minutes ago</div>
+        <div class="body">
+          <span class="tag t-cat">🛡️ Security</span><span class="tag t-major">🟠 Major</span>
+          <h4>SQL injection through the customer filter</h4>
+          <p>User input is formatted into the query string. Pass it as a parameter so the driver escapes it.</p>
+          <div class="sugg"><div class="h">Suggested change <b>Commit suggestion</b></div><div class="diff"><div class="del">-  q := fmt.Sprintf("... WHERE customer = '%s'", customer)</div><div class="add">+  q := "... WHERE customer = $1"</div><div class="add">+  rows, err := s.db.QueryContext(ctx, q, customer)</div></div></div>
+        </div>
+      </div>
+      <div class="scores">
+        <div class="score"><div class="n o">72</div><div class="l">Quality</div></div>
+        <div class="score"><div class="n r">40</div><div class="l">Security</div></div>
+        <div class="score"><div class="n g">86</div><div class="l">Maintainability</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features" class="alt">
+  <div class="wrap">
+    <div class="eyebrow">What you get</div>
+    <h2>A reviewer that reads the diff the way your team does</h2>
+    <p class="sub">Every comment is checked against the real diff before it's posted, so the bot never comments on code a pull request didn't touch.</p>
+    <div class="grid g3">
+      <div class="card"><div class="ic"><svg class="i"><use href="#i-code"/></svg></div><h3>Inline comments and suggestions</h3><p>Findings on the exact lines, with severity and a one-click committable suggestion on GitHub and GitLab.</p></div>
+      <div class="card"><div class="ic"><svg class="i"><use href="#i-file"/></svg></div><h3>Walkthrough summary</h3><p>A summary of what changed, file groups, review effort and a description check. It's edited in place on every run, never reposted.</p></div>
+      <div class="card"><div class="ic"><svg class="i"><use href="#i-gauge"/></svg></div><h3>Quality scores</h3><p>Quality, Security and Maintainability from 1 to 100, capped by the findings, with optional PR labels and a commit status.</p></div>
+      <div class="card"><div class="ic"><svg class="i"><use href="#i-search"/></svg></div><h3>Verification pass</h3><p>A second, skeptical model, optionally from another provider, checks every finding. Disputed major issues become questions instead of disappearing.</p></div>
+      <div class="card"><div class="ic"><svg class="i"><use href="#i-repeat"/></svg></div><h3>Incremental, never repetitive</h3><p>New pushes are reviewed for what changed. Issues already on the PR aren't posted again, even when worded differently.</p></div>
+      <div class="card"><div class="ic"><svg class="i"><use href="#i-shield"/></svg></div><h3>Secret scanner and guardrails</h3><p>Leaked keys are caught without a model call. PR content is treated as untrusted, and review rules come from the target branch.</p></div>
+      <div class="card"><div class="ic"><svg class="i"><use href="#i-book"/></svg></div><h3>Reads your AGENTS.md</h3><p>Guideline files (AGENTS.md, CLAUDE.md, Copilot instructions) are applied, including folder-level AGENTS.md, nearest first.</p></div>
+      <div class="card"><div class="ic"><svg class="i"><use href="#i-git"/></svg></div><h3>GitHub, GitLab, Bitbucket</h3><p>GitHub and GitHub Enterprise, gitlab.com and self-managed GitLab, and Bitbucket Cloud, with each host's own Markdown and limits.</p></div>
+      <div class="card"><div class="ic"><svg class="i"><use href="#i-layers"/></svg></div><h3>Large PRs, handled</h3><p>Token-budgeted batches run in parallel. Big files get context excerpts around each change, and one failing batch doesn't sink the review.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="models">
+  <div class="wrap">
+    <div class="eyebrow">Bring your own model</div>
+    <h2>Switch providers with one line</h2>
+    <p class="sub">Pick a model with <code>--model</code>, <code>CODEREVIEW_MODEL</code> or <code>model:</code> in the config: a <code>provider:model</code> spec or a named profile. Add fallbacks, and use a different model for verification.</p>
+    <div class="providers">
+      <span class="prov">OpenAI</span><span class="prov">Anthropic</span><span class="prov">Google Gemini</span><span class="prov">AWS Bedrock <small>any model family</small></span><span class="prov">Azure OpenAI</span><span class="prov">Ollama</span><span class="prov">OpenRouter</span><span class="prov">Groq</span><span class="prov">DeepSeek</span><span class="prov">Mistral</span><span class="prov">xAI</span><span class="prov">Together</span><span class="prov">LiteLLM</span><span class="prov">Any OpenAI-compatible server</span>
+    </div>
+    <div class="grid g1">
+      <div class="codeblock"><div class="ttl">codereview.yaml <button class="copy" data-copy="cfg-models">Copy</button></div><pre id="cfg-models"><span class="k">model:</span> claude            <span class="c"># change this line to switch provider</span>
+<span class="k">fallback:</span> [backup]
+<span class="k">models:</span>
+  <span class="k">claude:</span>  { provider: bedrock, model: <span class="s">&lt;model-or-inference-profile-id&gt;</span>, region: us-east-1 }
+  <span class="k">backup:</span>  { provider: openai,  model: <span class="s">&lt;model&gt;</span>, api_key_env: OPENAI_API_KEY }
+  <span class="k">local:</span>   { provider: ollama,  model: <span class="s">"qwen2.5-coder:14b"</span> }
+<span class="k">review:</span>
+  <span class="k">verify_model:</span> <span class="s">"bedrock:moonshotai.kimi-k2.5"</span>   <span class="c"># a second opinion from another family</span></pre></div>
+      <div class="codeblock"><div class="ttl">Or straight from the environment <button class="copy" data-copy="env-models">Copy</button></div><pre id="env-models"><span class="c"># the provider's usual key variable is read automatically</span>
+export CODEREVIEW_MODEL=anthropic:claude-sonnet-5-5   ANTHROPIC_API_KEY=...
+export CODEREVIEW_MODEL=openai:<span class="s">&lt;model&gt;</span>               OPENAI_API_KEY=...
+export CODEREVIEW_MODEL=gemini:<span class="s">&lt;model&gt;</span>               GEMINI_API_KEY=...
+export CODEREVIEW_MODEL=bedrock:<span class="s">&lt;model-id&gt;</span>           AWS_REGION=us-east-1
+export CODEREVIEW_MODEL=ollama:qwen2.5-coder:14b     <span class="c"># local, no key</span>
+
+codereview ping     <span class="c"># check every model in the chain</span></pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart" class="alt">
+  <div class="wrap">
+    <div class="eyebrow">Quick start</div>
+    <h2>Review a pull request in a minute</h2>
+    <p class="sub">Nothing is written to a pull request unless you pass <code>--post</code>. Try it as a dry run first.</p>
+    <div class="codeblock"><div class="ttl">Terminal <button class="copy" data-copy="qs">Copy</button></div><pre id="qs"><span class="c"># install (or download a binary from Releases, or use the Docker image)</span>
+go install github.com/divmora/code-review-bot/cmd/codereview@latest
+
+codereview review --local                         <span class="c"># your uncommitted changes</span>
+codereview review --local --base origin/main      <span class="c"># your branch vs main</span>
+codereview review https://github.com/org/repo/pull/123                <span class="c"># dry run</span>
+codereview review https://gitlab.com/group/proj/-/merge_requests/9 --post
+codereview review https://bitbucket.org/team/repo/pull-requests/7 --post --commit-status
+codereview ask https://github.com/org/repo/pull/123 "Is the retry loop safe?"</pre></div>
+  </div>
+</section>
+
+<section id="ci">
+  <div class="wrap">
+    <div class="eyebrow">CI/CD</div>
+    <h2>Review every push, with no server</h2>
+    <p class="sub">The PR is detected from the CI environment. State lives on the PR itself, so each run picks up where the last one stopped.</p>
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" aria-controls="tab-gh" id="t-gh">GitHub Actions</button>
+      <button role="tab" aria-selected="false" aria-controls="tab-gl" id="t-gl">GitLab CI</button>
+      <button role="tab" aria-selected="false" aria-controls="tab-bb" id="t-bb">Bitbucket Pipelines</button>
+    </div>
+    <div class="tabpanel" id="tab-gh" role="tabpanel" aria-labelledby="t-gh"><div class="codeblock"><div class="ttl">.github/workflows/code-review.yml <button class="copy" data-copy="ci-gh">Copy</button></div><pre id="ci-gh"><span class="k">name:</span> AI code review
+<span class="k">on:</span>
+  <span class="k">pull_request:</span>
+    <span class="k">types:</span> [opened, reopened, synchronize, ready_for_review]
+<span class="k">permissions:</span>
+  <span class="k">contents:</span> read
+  <span class="k">pull-requests:</span> write
+<span class="k">jobs:</span>
+  <span class="k">review:</span>
+    <span class="k">if:</span> ${{ !github.event.pull_request.head.repo.fork }}
+    <span class="k">runs-on:</span> ubuntu-latest
+    <span class="k">steps:</span>
+      - <span class="k">uses:</span> divmora/code-review-bot@v0.2.0
+        <span class="k">with:</span>
+          <span class="k">model:</span> anthropic:claude-sonnet-5-5
+          <span class="c"># fail-on: critical</span>
+        <span class="k">env:</span>
+          <span class="k">ANTHROPIC_API_KEY:</span> ${{ secrets.ANTHROPIC_API_KEY }}</pre></div></div>
+    <div class="tabpanel" id="tab-gl" role="tabpanel" aria-labelledby="t-gl" hidden><div class="codeblock"><div class="ttl">.gitlab-ci.yml <button class="copy" data-copy="ci-gl">Copy</button></div><pre id="ci-gl"><span class="k">ai-code-review:</span>
+  <span class="k">stage:</span> test
+  <span class="k">image:</span>
+    <span class="k">name:</span> ghcr.io/divmora/code-review-bot:v0.2.0
+    <span class="k">entrypoint:</span> [<span class="s">""</span>]
+  <span class="k">rules:</span>
+    - <span class="k">if:</span> $CI_PIPELINE_SOURCE == <span class="s">"merge_request_event"</span>
+  <span class="k">variables:</span>
+    <span class="k">CODEREVIEW_MODEL:</span> <span class="s">"openai:&lt;model&gt;"</span>
+    <span class="c"># GITLAB_TOKEN (api scope) and OPENAI_API_KEY as masked CI/CD variables</span>
+  <span class="k">script:</span>
+    - codereview review --auto --post --format markdown --output review.md
+  <span class="k">artifacts:</span> { when: always, paths: [review.md] }</pre></div></div>
+    <div class="tabpanel" id="tab-bb" role="tabpanel" aria-labelledby="t-bb" hidden><div class="codeblock"><div class="ttl">bitbucket-pipelines.yml · v0.3.0+ <button class="copy" data-copy="ci-bb">Copy</button></div><pre id="ci-bb"><span class="k">image:</span> atlassian/default-image:4
+<span class="k">pipelines:</span>
+  <span class="k">pull-requests:</span>
+    <span class="s">'**'</span>:
+      - <span class="k">step:</span>
+          <span class="k">name:</span> AI code review
+          <span class="k">script:</span>
+            - VERSION=0.3.0
+            - curl -fsSL -o crb.tgz <span class="s">"https://github.com/divmora/code-review-bot/releases/download/v${VERSION}/code-review-bot_${VERSION}_linux_amd64.tar.gz"</span>
+            - tar -xzf crb.tgz codereview
+            - export CODEREVIEW_MODEL=<span class="s">"openai:&lt;model&gt;"</span>   <span class="c"># + BITBUCKET_TOKEN and the model key as secured variables</span>
+            - ./codereview review --auto --post --commit-status</pre></div></div>
+  </div>
+</section>
+
+<section id="config" class="alt">
+  <div class="wrap">
+    <div class="eyebrow">Per-repository config</div>
+    <h2>Your rules, from your target branch</h2>
+    <p class="sub">Commit <code>.codereview.yaml</code> to the default branch. It's read from the target branch, like CODEOWNERS, so a pull request can't loosen the rules it's reviewed against. The keys for the PR description and title match CodeRabbit's.</p>
+    <div class="grid g2">
+      <div class="codeblock"><div class="ttl">.codereview.yaml <button class="copy" data-copy="repo-cfg">Copy</button></div><pre id="repo-cfg"><span class="k">profile:</span> balanced          <span class="c"># chill | balanced | assertive</span>
+<span class="k">instructions:</span> |
+  Flag fmt.Println outside tests; we use log/slog.
+<span class="k">path_instructions:</span>
+  - <span class="k">path:</span> <span class="s">"migrations/**"</span>
+    <span class="k">instructions:</span> Migrations must be reversible.
+<span class="k">path_filters:</span> [<span class="s">"!docs/**"</span>]
+<span class="k">max_comments:</span> 20
+<span class="k">high_level_summary:</span> true   <span class="c"># "Summary by codereview" in the description</span>
+<span class="k">auto_title_placeholder:</span> <span class="s">"@codereview"</span>
+<span class="k">auto_review:</span>
+  <span class="k">drafts:</span> false
+  <span class="k">base_branches:</span> [main, <span class="s">"release/*"</span>]</pre></div>
+      <div class="card">
+        <ul class="check">
+          <li><svg class="i"><use href="#i-check"/></svg><span><b>AGENTS.md and friends:</b> project guidelines, plus folder-level AGENTS.md, are checked against every change.</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span><b>Description check:</b> the bot says when the description misses or misstates what the code does, and suggests a title.</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span><b>Never rewrites authors:</b> its summary goes in its own block; titles change only when you add the placeholder.</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span><b>Noise control:</b> profiles, severity thresholds, a comment budget, and lockfiles, generated and vendored files skipped.</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span><b>Scores and status:</b> <code>--score-labels</code> sets <code>Quality Score::85</code>-style labels, and <code>--commit-status</code> marks each reviewed commit.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="cli">
+  <div class="wrap">
+    <div class="eyebrow">Reference</div>
+    <h2>CLI</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>review [URL]</code></td><td>Review one PR/MR: <code>--local</code>, <code>--base</code>, <code>--post</code>, <code>--full</code>, <code>--auto</code>, <code>--format text|markdown|json|sarif</code>, <code>--fail-on</code>, <code>--profile</code>, <code>--max-comments</code>, <code>--min-severity</code>, <code>--score-labels</code>, <code>--commit-status</code>, <code>--verify-model</code></td></tr>
+        <tr><td><code>ask URL "question"</code></td><td>Answer a question about a PR using its diff (<code>--post</code> to reply on it)</td></tr>
+        <tr><td><code>models</code></td><td>List providers, profiles and the active model chain</td></tr>
+        <tr><td><code>ping</code></td><td>Test each model in the chain with a tiny structured request</td></tr>
+        <tr><td><code>version</code></td><td>Print the version</td></tr>
+      </tbody>
+    </table></div>
+    <p class="sub" style="margin-top:18px">Exit codes: <code>0</code> success, <code>1</code> error, <code>3</code> a finding met <code>--fail-on</code>. The JSON output is a stable contract for other tools.</p>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="console">
+      <div>
+        <h2 style="margin:0">Need it as a service?</h2>
+        <p>Divmora Code Review Console adds webhooks, a review queue, chat commands (<code>@codereview</code>), SSO, a repository allowlist, history and dashboards. It runs this CLI through local, Docker or Kubernetes executors.</p>
+      </div>
+      <a class="btn primary" href="mailto:licensing@divmora.com?subject=Code%20Review%20Console">Talk to us <svg class="i"><use href="#i-arrow"/></svg></a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Code Review Bot by <a href="https://divmora.com">DIVMORA Technologies</a> · Apache License 2.0</span>
+    <span><a href="https://github.com/divmora/code-review-bot">GitHub</a> · <a href="https://github.com/divmora/code-review-bot/releases">Releases</a> · <a href="https://github.com/divmora/code-review-bot/blob/main/SECURITY.md">Security</a> · <a href="https://github.com/divmora/code-review-bot/blob/main/CONTRIBUTING.md">Contributing</a></span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // Theme toggle (remembered per browser; storage may be unavailable).
+  var root = document.documentElement, btn = document.getElementById("theme");
+  try { var saved = localStorage.getItem("crb-theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
+  btn.addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme") === "dark" : !matchMedia("(prefers-color-scheme: light)").matches;
+    var next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("crb-theme", next); } catch (e) {}
+  });
+  // Tabs.
+  var tabs = document.querySelectorAll('[role="tab"]');
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function () {
+      tabs.forEach(function (o) {
+        var on = o === t;
+        o.setAttribute("aria-selected", on ? "true" : "false");
+        document.getElementById(o.getAttribute("aria-controls")).hidden = !on;
+      });
+    });
+  });
+  // Copy buttons.
+  document.querySelectorAll(".copy").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var text = document.getElementById(b.getAttribute("data-copy")).innerText;
+      (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(function () {
+        b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500);
+      }, function () { b.textContent = "Select & copy"; });
+    });
+  });
+})();
+</script>
+</body>
+</html>

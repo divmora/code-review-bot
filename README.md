@@ -4,6 +4,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CI/CD](https://github.com/divmora/code-review-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/divmora/code-review-bot/actions)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/divmora/code-review-bot)](go.mod)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://divmora.github.io/code-review-bot/)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/divmora/code-review-bot)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-green.svg)](SECURITY.md)
 
