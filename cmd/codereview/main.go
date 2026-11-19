@@ -11,6 +11,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -36,6 +37,7 @@ Usage:
   codereview models [flags]            Show providers, model profiles and the active model chain
   codereview ping [flags]              Send a tiny request to check model credentials
   codereview config validate [flags]   Check the config (and $CODEREVIEW_OVERRIDES) without calling a model
+  codereview learn [flags]             Turn a reply to a review comment into a team learning (JSON on stdin)
   codereview version
 
 Pick a model with --model, CODEREVIEW_MODEL or "model:" in codereview.yaml:
@@ -65,6 +67,8 @@ func main() {
 		err = cmdPing(ctx, os.Args[2:])
 	case "config":
 		err = cmdConfig(os.Args[2:])
+	case "learn":
+		err = cmdLearn(ctx, os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println(version.Version)
 	case "help", "-h", "--help":
@@ -376,6 +380,46 @@ func cmdPing(ctx context.Context, args []string) error {
 		return fmt.Errorf("%d of %d models failed", failed, len(chain))
 	}
 	return nil
+}
+
+// cmdLearn reads {"repo","path","finding","reply","author","existing"} as
+// JSON from stdin (or $CODEREVIEW_LEARN_INPUT) and prints whether the reply
+// holds a reusable team learning. Divmora Code Review Console runs it when
+// someone replies to one of the bot's comments.
+func cmdLearn(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("learn", flag.ExitOnError)
+	var c common
+	c.register(fs)
+	_ = fs.Parse(args)
+	cfg, logger, err := c.setup()
+	if err != nil {
+		return err
+	}
+	raw := []byte(os.Getenv("CODEREVIEW_LEARN_INPUT"))
+	if len(raw) == 0 {
+		if raw, err = io.ReadAll(io.LimitReader(os.Stdin, 1<<20)); err != nil {
+			return err
+		}
+	}
+	var in review.LearnInput
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return fmt.Errorf("learn input: %w", err)
+	}
+	chain, err := cfg.ModelChain(c.model)
+	if err != nil {
+		return err
+	}
+	client, err := llm.NewChain(chain, logger)
+	if err != nil {
+		return err
+	}
+	out, usage, err := review.Learn(ctx, client, in)
+	if err != nil {
+		return err
+	}
+	b, _ := json.Marshal(map[string]any{"learning": out.Learning, "text": out.Text, "path": out.Path, "reason": out.Reason,
+		"model": out.Model, "usage": usage})
+	return writeReport("", string(b)+"\n")
 }
 
 // cmdConfig validates the config strictly: unknown keys, model profiles and

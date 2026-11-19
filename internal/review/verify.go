@@ -189,6 +189,9 @@ func (e *Engine) verify(ctx context.Context, res *Result, in Input, byPath map[s
 	}
 
 	system := verifySystem
+	if l := in.Repo.LearningsBlock(); l != "" {
+		system += "\n\n" + learningsPreamble + " A finding that contradicts a team learning is a false positive.\n" + l
+	}
 	if g := rootGuidelines(in.Guidelines); g != "" {
 		system += "\n\nRepository guidelines (from the target branch):\n" + g
 	}

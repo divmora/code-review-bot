@@ -120,7 +120,7 @@ The CLI is designed to be driven by schedulers such as Divmora Code Review Conso
 | Engine config | `--config codereview.yaml`, or the YAML itself in `CODEREVIEW_CONFIG_YAML` (model profiles, limits; reference keys with `api_key_env`) |
 | Checking input | `codereview config validate [--format json]`: rejects unknown keys, unknown providers, unresolvable models and invalid `CODEREVIEW_OVERRIDES`, without calling a model. Exit `1` when invalid |
 | Secrets | environment only: provider keys, `GITHUB_TOKEN`, `GITLAB_TOKEN` |
-| Per-repo admin settings | `CODEREVIEW_OVERRIDES` JSON: `profile`, `max_comments`, `min_severity`, `model`, `auto_review`, `drafts`, `instructions` |
+| Per-repo admin settings | `CODEREVIEW_OVERRIDES` JSON: `profile`, `max_comments`, `min_severity`, `model`, `auto_review`, `drafts`, `instructions`, `learnings` |
 | Output | `--format json`: the full result (findings, summary, usage), plus `posted`, `rejected` and `pr_url`; `{"skipped": true, "skip_reason": ...}` when skipped |
 | Logs | stderr |
 | Exit code | `0` success, `1` error, `3` a finding met `--fail-on` |
@@ -195,6 +195,19 @@ The reviewer reads your project's guideline files **from the target branch** and
 
 They're size-capped (about 6k tokens), and reading them from the target branch means a PR can't rewrite the rules it's reviewed against. Configure or disable them in `.codereview.yaml` under `guidelines:`.
 
+## Team learnings
+
+Learnings are decisions your team made in earlier reviews ("account numbers are compared without leading zeros on purpose"). The reviewer follows them and the verifier treats a finding that contradicts one as a false positive. Put them in `.codereview.yaml` (target branch):
+
+```yaml
+learnings:
+  - text: Account numbers are compared without leading zeros on purpose.
+  - text: Controllers under Legacy are frozen; do not suggest refactors.
+    path: "api/app/Http/Controllers/Legacy/**"
+```
+
+or pass them in `CODEREVIEW_OVERRIDES` (`"learnings": [{"text": "...", "path": "..."}]`, at most 100, 600 characters each), which is how Divmora Code Review Console shares learnings across a group's repositories. `codereview learn` turns a human reply to a review comment into a learning: it reads `{"repo","path","finding","reply","author","existing"}` as JSON on stdin and prints `{"learning": true|false, "text", "path", "reason"}`.
+
 ## Context for large files
 
 Files up to `review.full_file_max_lines` (800) are sent whole. Larger files are sent as numbered excerpts of `review.context_lines` (60) lines around each change, so the model sees nearby definitions instead of a bare hunk.
@@ -226,6 +239,7 @@ auto_review:
 | `ask URL "question"` | Answer a question about a PR (`--post` to reply on it) |
 | `models` | List providers, profiles and the active chain |
 | `ping` | Test each model in the chain |
+| `learn` | Turn a reply to a review comment into a team learning (JSON on stdin) |
 | `config validate` | Check the config strictly (unknown keys, providers, model chain, verify model) and `CODEREVIEW_OVERRIDES`; `--format json` for programs |
 | `version` | Print version |
 

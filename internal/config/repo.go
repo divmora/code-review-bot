@@ -23,6 +23,10 @@ const (
 // unset inherit the operator defaults.
 type RepoConfig struct {
 	Profile Profile `yaml:"profile"`
+	// Learnings are team decisions from earlier reviews ("we pad account
+	// numbers with zeros on purpose"). The reviewer follows them and the
+	// verifier drops findings they rule out.
+	Learnings []Learning `yaml:"learnings"`
 	// Instructions apply to the whole review (team conventions, focus).
 	Instructions string `yaml:"instructions"`
 	// PathInstructions add guidance for files matching a glob.
@@ -335,7 +339,22 @@ type Overrides struct {
 	AutoReview   *bool   `json:"auto_review,omitempty"`
 	Drafts       *bool   `json:"drafts,omitempty"`
 	Instructions string  `json:"instructions,omitempty"` // appended to repo instructions
+	// Learnings are added to the repository's own (e.g. from the console).
+	Learnings []Learning `json:"learnings,omitempty"`
 }
+
+// Learning is one team decision. Path, when set, is a glob limiting it to
+// matching files.
+type Learning struct {
+	Text string `json:"text" yaml:"text"`
+	Path string `json:"path,omitempty" yaml:"path"`
+}
+
+// Learning limits keep the prompt section bounded.
+const (
+	MaxLearnings    = 100
+	MaxLearningText = 600
+)
 
 // Validate checks override values.
 func (o *Overrides) Validate(profiles map[string]bool) error {
@@ -364,6 +383,14 @@ func (o *Overrides) Validate(profiles map[string]bool) error {
 	}
 	if len(o.Instructions) > 8000 {
 		return fmt.Errorf("instructions are limited to 8000 characters")
+	}
+	if len(o.Learnings) > MaxLearnings {
+		return fmt.Errorf("at most %d learnings", MaxLearnings)
+	}
+	for _, l := range o.Learnings {
+		if t := strings.TrimSpace(l.Text); t == "" || len(t) > MaxLearningText {
+			return fmt.Errorf("a learning needs text of at most %d characters", MaxLearningText)
+		}
 	}
 	return nil
 }
@@ -394,4 +421,27 @@ func (o *Overrides) Apply(rc *RepoConfig) {
 	if s := strings.TrimSpace(o.Instructions); s != "" {
 		rc.Instructions = strings.TrimSpace(rc.Instructions + "\n\n" + s)
 	}
+	rc.Learnings = append(rc.Learnings, o.Learnings...)
+}
+
+// LearningsBlock renders the learnings for a prompt ("" when none).
+func (r *RepoConfig) LearningsBlock() string {
+	var b strings.Builder
+	n := 0
+	for _, l := range r.Learnings {
+		t := strings.TrimSpace(l.Text)
+		if t == "" || n >= MaxLearnings {
+			continue
+		}
+		if len(t) > MaxLearningText {
+			t = t[:MaxLearningText]
+		}
+		b.WriteString("- ")
+		if p := strings.TrimSpace(l.Path); p != "" {
+			b.WriteString("[" + p + "] ")
+		}
+		b.WriteString(strings.ReplaceAll(t, "\n", " ") + "\n")
+		n++
+	}
+	return b.String()
 }
