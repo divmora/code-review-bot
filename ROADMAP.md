@@ -16,8 +16,6 @@ Active, assigned work belongs in GitHub Issues instead.
   with tree-sitter or LSP and include them in the prompt.
 - [ ] **Linter and SAST integration**: run configured tools (golangci-lint, eslint, semgrep,
   gitleaks) and let the model triage and explain their findings.
-- [ ] **Two-pass verification**: an optional second model call that challenges each finding before
-  posting, to cut false positives further.
 - [ ] **Docstring and unit-test generation** commands.
 - [ ] **Prompt caching** for providers that support it (Anthropic, Bedrock, Gemini, OpenAI) to cut
   the cost of shared system prompts across batches.

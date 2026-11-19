@@ -159,6 +159,16 @@ ul.check b { color: var(--text); font-weight: 600; }
 
 .console { display: flex; gap: 24px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, var(--panel)), var(--panel)); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; }
 .console p { color: var(--muted); margin: 6px 0 0; max-width: 640px; }
+/* how it works */
+ol.flow { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; counter-reset: step; }
+@media (max-width: 920px) { ol.flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { ol.flow { grid-template-columns: minmax(0, 1fr); } }
+ol.flow li { counter-increment: step; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 18px 16px; }
+ol.flow li::before { content: counter(step); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; margin-bottom: 10px; font-weight: 700; font-size: 14px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+ol.flow li p { margin: 0; color: var(--muted); font-size: 14px; }
+.card .lvl { display: inline-block; font-size: 12px; font-weight: 600; color: var(--accent-2); margin-left: 6px; }
+.note { margin-top: 18px; }
+.note li { font-size: 14.5px; }
 footer { padding: 36px 0 48px; color: var(--faint); font-size: 14px; border-top: 1px solid var(--line); }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; }
 footer a { color: var(--muted); }
@@ -186,6 +196,7 @@ footer a { color: var(--muted); }
     <a class="brand" href="#top"><span class="logo"><svg class="i"><use href="#i-code"/></svg></span>Code Review Bot</a>
     <nav>
       <a href="#features" class="hide-sm">Features</a>
+      <a href="#how" class="hide-sm">How it works</a>
       <a href="#models" class="hide-sm">Models</a>
       <a href="#ci">CI/CD</a>
       <a href="#config" class="hide-sm">Config</a>
@@ -256,6 +267,24 @@ footer a { color: var(--muted); }
   </div>
 </section>
 
+<section id="how">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2>From diff to review in eight steps</h2>
+    <p class="sub">Each run reviews one pull request. The model only proposes findings: deterministic checks decide what gets posted.</p>
+    <ol class="flow">
+      <li><h3>Read the PR</h3><p>Diff, description and the repo's <code>.codereview.yaml</code>, read from the target branch.</p></li>
+      <li><h3>Pick up where it stopped</h3><p>The last reviewed commit is read from the bot's own comment, so only new changes are sent.</p></li>
+      <li><h3>Filter and scan</h3><p>Lockfiles, generated, vendored and binary files are skipped. Added lines are scanned for secrets.</p></li>
+      <li><h3>Batch with context</h3><p>Small files go whole, large ones as excerpts around each change, in token-budgeted batches.</p></li>
+      <li><h3>Review in parallel</h3><p>Batches go to your model with structured output, retries and fallback models.</p></li>
+      <li><h3>Check against the diff</h3><p>Comments on lines the PR didn't change, or on unknown files, are dropped.</p></li>
+      <li><h3>Verify</h3><p>A skeptical second pass removes false positives and turns uncertain findings into questions.</p></li>
+      <li><h3>Post</h3><p>Inline comments, the walkthrough summary, scores, labels and a commit status. Only with <code>--post</code>.</p></li>
+    </ol>
+  </div>
+</section>
+
 <section id="models">
   <div class="wrap">
     <div class="eyebrow">Bring your own model</div>
@@ -299,6 +328,13 @@ codereview review https://github.com/org/repo/pull/123                <span clas
 codereview review https://gitlab.com/group/proj/-/merge_requests/9 --post
 codereview review https://bitbucket.org/team/repo/pull-requests/7 --post --commit-status
 codereview ask https://github.com/org/repo/pull/123 "Is the retry loop safe?"</pre></div>
+    <div class="codeblock" style="margin-top:16px"><div class="ttl">Docker <button class="copy" data-copy="qs-docker">Copy</button></div><pre id="qs-docker"><span class="c"># the image's entrypoint is the codereview binary</span>
+docker run --rm -e CODEREVIEW_MODEL -e ANTHROPIC_API_KEY -e GITHUB_TOKEN \
+  ghcr.io/divmora/code-review-bot:0.4.0<!-- x-release-please-version --> review https://github.com/org/repo/pull/123
+
+<span class="c"># review local changes: mount the repository at /workspace</span>
+docker run --rm -v "$PWD:/workspace" -e CODEREVIEW_MODEL -e ANTHROPIC_API_KEY \
+  ghcr.io/divmora/code-review-bot:0.4.0<!-- x-release-please-version --> review --local</pre></div>
   </div>
 </section>
 
@@ -342,7 +378,8 @@ codereview ask https://github.com/org/repo/pull/123 "Is the retry loop safe?"</p
     <span class="c"># GITLAB_TOKEN (api scope) and OPENAI_API_KEY as masked CI/CD variables</span>
   <span class="k">script:</span>
     - codereview review --auto --post --format markdown --output review.md
-  <span class="k">artifacts:</span> { when: always, paths: [review.md] }</pre></div></div>
+  <span class="k">artifacts:</span> { when: always, paths: [review.md] }
+  <span class="k">allow_failure:</span> true   <span class="c"># a failed review never blocks the pipeline</span></pre></div></div>
     <div class="tabpanel" id="tab-bb" role="tabpanel" aria-labelledby="t-bb" hidden><div class="codeblock"><div class="ttl">bitbucket-pipelines.yml · v0.3.0+ <button class="copy" data-copy="ci-bb">Copy</button></div><pre id="ci-bb"><span class="k">image:</span> atlassian/default-image:4
 <span class="k">pipelines:</span>
   <span class="k">pull-requests:</span>
@@ -355,6 +392,11 @@ codereview ask https://github.com/org/repo/pull/123 "Is the retry loop safe?"</p
             - tar -xzf crb.tgz codereview
             - export CODEREVIEW_MODEL=<span class="s">"openai:&lt;model&gt;"</span>   <span class="c"># + BITBUCKET_TOKEN and the model key as secured variables</span>
             - ./codereview review --auto --post --commit-status</pre></div></div>
+    <ul class="check note">
+      <li><svg class="i"><use href="#i-check"/></svg><span><b>Drafts and repeats skipped:</b> with <code>--auto</code>, draft PRs, closed PRs and commits already reviewed are skipped. Set <code>auto_review.drafts: true</code> to review drafts.</span></li>
+      <li><svg class="i"><use href="#i-check"/></svg><span><b>Self-managed GitLab:</b> the instance comes from <code>CI_SERVER_URL</code>. If it uses a private CA, add the CA to the image or point <code>SSL_CERT_FILE</code> at it. <code>skip_tls_verify: true</code> under <code>gitlab:</code> in <code>codereview.yaml</code> is a last resort.</span></li>
+      <li><svg class="i"><use href="#i-check"/></svg><span><b>Gate merges if you want:</b> <code>--fail-on critical</code> exits with code 3. Leave it off for advisory reviews.</span></li>
+    </ul>
   </div>
 </section>
 
@@ -386,6 +428,12 @@ codereview ask https://github.com/org/repo/pull/123 "Is the retry loop safe?"</p
           <li><svg class="i"><use href="#i-check"/></svg><span><b>Scores and status:</b> <code>--score-labels</code> sets <code>Quality Score::85</code>-style labels, and <code>--commit-status</code> marks each reviewed commit.</span></li>
         </ul>
       </div>
+    </div>
+    <h3 style="margin:36px 0 12px">Review profiles</h3>
+    <div class="grid g3">
+      <div class="card"><h3><code>chill</code><span class="lvl">fewest comments</span></h3><p>Likely bugs, security problems, data loss and serious performance issues only. No style or naming points.</p></div>
+      <div class="card"><h3><code>balanced</code><span class="lvl">default</span></h3><p>Bugs, security and performance, plus maintainability problems that will clearly cause trouble. Skips pure style preferences.</p></div>
+      <div class="card"><h3><code>assertive</code><span class="lvl">most thorough</span></h3><p>Adds readability, naming, missing tests and documentation gaps. Small polish items are marked as nitpicks.</p></div>
     </div>
   </div>
 </section>
