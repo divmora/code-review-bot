@@ -60,7 +60,7 @@ databases belong in the console. Don't add a long-running server here.
 
 ## Adding things
 
-- **Provider**: new file in `internal/llm`, `Register` in `init`, test request/response shape. If
+- **Provider**: new file in `pkg/llm`, `Register` in `init`, test request/response shape. If
   it speaks the OpenAI API, add an entry to `compatProviders` instead.
 - **Code host**: implement `vcs.Client` and add URL/CI detection.
 - **Config key**: update `examples/`, `README.md` and the `TestExamplesParse` expectations.

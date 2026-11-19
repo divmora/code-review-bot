@@ -10,7 +10,7 @@ pipelines:
       - step:
           name: AI code review
           script:
-            - VERSION=0.3.0
+            - VERSION=0.3.0 # x-release-please-version
             - curl -fsSL -o crb.tgz "https://github.com/divmora/code-review-bot/releases/download/v${VERSION}/code-review-bot_${VERSION}_linux_amd64.tar.gz"
             - tar -xzf crb.tgz codereview && rm crb.tgz
             # The PR, workspace and repository come from BITBUCKET_PR_ID,

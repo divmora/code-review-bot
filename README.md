@@ -86,20 +86,22 @@ models:
 
 Every response is also parsed leniently (fenced or prose-wrapped JSON), so weaker models still work. `codereview models` prints the active chain; `codereview ping` tests every model in it.
 
-**Adding a provider** means implementing `llm.Client` (`Name`, `Complete`) and calling `llm.Register("name", factory)`. See [`internal/llm`](internal/llm).
+**Adding a provider** means implementing `llm.Client` (`Name`, `Complete`) and calling `llm.Register("name", factory)`. See [`pkg/llm`](pkg/llm).
 
 ## Run in CI
 
 **GitHub Actions**: see [`examples/github-workflow.yml`](examples/github-workflow.yml).
 
+<!-- x-release-please-start-version -->
 ```yaml
-- uses: divmora/code-review-bot@v0.2.0
+- uses: divmora/code-review-bot@v0.3.0
   with:
     model: anthropic:claude-sonnet-5-5
     fail-on: critical          # optional gate
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
+<!-- x-release-please-end -->
 
 **GitLab CI**: see [`examples/gitlab-ci.yml`](examples/gitlab-ci.yml). The MR is detected from `CI_*` variables; set `GITLAB_TOKEN` (`api` scope) and your provider key as masked variables.
 

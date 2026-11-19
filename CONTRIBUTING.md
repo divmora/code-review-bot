@@ -29,7 +29,7 @@ export CODEREVIEW_MODEL=ollama:qwen2.5-coder:14b   # or any provider:model
 ## Pull requests
 
 1. Branch from `main`.
-2. Keep changes focused; add or update tests (see the `httptest` patterns in `internal/llm` and `internal/app`).
+2. Keep changes focused; add or update tests (see the `httptest` patterns in `pkg/llm` and `pkg/app`).
 3. Update `README.md`, `examples/` and `AGENTS.md` when behaviour, flags or config keys change.
 4. Use a [Conventional Commits](https://www.conventionalcommits.org/) PR title (`feat:`, `fix:`, `docs:` ...). Release Please builds the changelog from it.
 

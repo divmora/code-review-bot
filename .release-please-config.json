@@ -8,7 +8,27 @@
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false,
       "extra-files": [
-        "internal/version/version.go"
+        "internal/version/version.go",
+        {
+          "type": "generic",
+          "path": "README.md"
+        },
+        {
+          "type": "generic",
+          "path": "docs/index.html"
+        },
+        {
+          "type": "generic",
+          "path": "examples/github-workflow.yml"
+        },
+        {
+          "type": "generic",
+          "path": "examples/gitlab-ci.yml"
+        },
+        {
+          "type": "generic",
+          "path": "examples/bitbucket-pipelines.yml"
+        }
       ]
     }
   }
