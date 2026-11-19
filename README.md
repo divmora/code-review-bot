@@ -15,7 +15,7 @@ Each run reviews **one** pull/merge request, or your local changes:
 - **CI/CD**: a GitHub Action, GitLab CI job or Bitbucket Pipelines step reviews every push to a PR. There's no server to host.
 - **CLI**: review a PR/MR by URL, or your uncommitted changes before you push.
 
-For webhook-driven reviews across many repositories, with a queue, chat commands (`@codereview ...`), SSO, a repository allowlist, history and dashboards, use **Divmora Code Review Console**, which runs this CLI as its review engine through local, Docker or Kubernetes executors.
+For webhook-driven reviews across many repositories, with a queue, chat commands (`@codereview ...`), SSO, a repository allowlist, history and dashboards, use **[Divmora Code Review Console](https://divmora.github.io/code-review-console/)**, which runs this CLI as its review engine through local, Docker or Kubernetes executors.
 
 ## What a review contains
 
@@ -259,4 +259,4 @@ Architecture and contributor notes are in [AGENTS.md](AGENTS.md); planned work i
 
 Licensed under the **Apache License, Version 2.0**. It is free to use, modify and run in any environment, including commercial and production use, with no commercial license required. See [LICENSE](LICENSE).
 
-Divmora Code Review Console (webhooks, queue, admin UI) is a separate product under the Business Source License 1.1.
+[Divmora Code Review Console](https://divmora.github.io/code-review-console/) (webhooks, queue, admin UI) is a separate product under the Elastic License 2.0, with a free core and paid features unlocked by a license key.
