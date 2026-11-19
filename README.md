@@ -178,6 +178,8 @@ The bot uses the same conventions and `.codereview.yaml` keys as CodeRabbit, and
 | `high_level_summary_placeholder` | `@codereview summary` | Put it in the description to choose where the block goes; it works even when `high_level_summary` is false. |
 | `high_level_summary_instructions` | | How to write the summary. |
 | `auto_title_placeholder` | `@codereview` | Put it in the PR title to have it replaced with a generated Conventional Commits title. Titles are never changed otherwise. |
+
+The bot's name in these placeholders and in the summary's command hints is `bot_name` from `codereview.yaml`. When it is not set, the bot uses the user its token belongs to (for example `@gitlab-bot`), so the code host autocompletes and notifies the real account. It falls back to `@codereview` when the token has no user (GitHub App installation tokens, Bitbucket repository access tokens): set `bot_name` there, for a GitHub App to its slug. Placeholders follow the name, e.g. `@gitlab-bot summary`.
 | `auto_title_instructions` | | How to write the title. |
 
 When the title or description doesn't match the code, the summary comment shows a **📝 Description check** with what's wrong or missing, plus a suggested title. The PR is read again just before editing, so edits made during the review are kept.

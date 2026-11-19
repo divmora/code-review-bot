@@ -30,6 +30,8 @@ type Config struct {
 	GitLab    []GitLab  `yaml:"gitlab"`
 	Bitbucket Bitbucket `yaml:"bitbucket"`
 	// BotName is the mention handle for chat commands (@<bot_name> review).
+	// Empty: the user the code host token belongs to (e.g. @gitlab-bot),
+	// or "codereview" when that cannot be read.
 	BotName string `yaml:"bot_name"`
 }
 
@@ -211,9 +213,6 @@ func (c *Config) applyEnv() {
 }
 
 func (c *Config) applyDefaults() {
-	if c.BotName == "" {
-		c.BotName = "codereview"
-	}
 	if c.GitHub.APIURL == "" {
 		c.GitHub.APIURL = "https://api.github.com"
 	}

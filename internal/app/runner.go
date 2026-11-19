@@ -29,8 +29,43 @@ type Runner struct {
 	// VerifyModelOverride forces the verification model (CLI --verify-model).
 	VerifyModelOverride string
 
-	mu      sync.Mutex
-	clients map[string]llm.Client
+	mu       sync.Mutex
+	clients  map[string]llm.Client
+	botNames map[string]string // per host: the token's user
+}
+
+// botName is the mention handle shown in summaries (@<bot> review) and used
+// for placeholders: bot_name from the config, else the user the token
+// belongs to (so the hint mentions the real bot account and the code host
+// autocompletes it), else "codereview". GitHub App tokens cannot read
+// /user; set bot_name to the App's slug there.
+func (r *Runner) botName(ctx context.Context, c vcs.Client, host string) string {
+	if r.Cfg.BotName != "" {
+		return r.Cfg.BotName
+	}
+	r.mu.Lock()
+	if n, ok := r.botNames[host]; ok {
+		r.mu.Unlock()
+		return n
+	}
+	r.mu.Unlock()
+	name := "codereview"
+	if u, ok := c.(interface {
+		CurrentUser(context.Context) (string, error)
+	}); ok {
+		if login, err := u.CurrentUser(ctx); err == nil && login != "" {
+			name = login
+		} else if err != nil {
+			r.Logger.Debug("could not read the token user; using @codereview", "error", err)
+		}
+	}
+	r.mu.Lock()
+	if r.botNames == nil {
+		r.botNames = map[string]string{}
+	}
+	r.botNames[host] = name
+	r.mu.Unlock()
+	return name
 }
 
 // Options for one review.
@@ -124,11 +159,11 @@ func statusLine(res *review.Result, posted int) string {
 	return s
 }
 
-// placeholders returns the summary and title placeholders, following
-// bot_name when the repo kept the defaults.
-func (r *Runner) placeholders(rc config.RepoConfig) (summary, title string) {
+// placeholders returns the summary and title placeholders, following the
+// bot's name when the repo kept the defaults.
+func placeholders(rc config.RepoConfig, bot string) (summary, title string) {
 	summary, title = rc.HighLevelSummaryPlaceholder, rc.AutoTitlePlaceholder
-	if bot := r.Cfg.BotName; bot != "" && bot != "codereview" {
+	if bot != "" && bot != "codereview" {
 		if summary == "@codereview summary" {
 			summary = "@" + bot + " summary"
 		}
@@ -143,7 +178,7 @@ func (r *Runner) placeholders(rc config.RepoConfig) (summary, title string) {
 // title that contains the title placeholder, like CodeRabbit. The PR is read
 // again first so edits made during the review are not lost. Failures are
 // logged: the review itself is already posted.
-func (r *Runner) updatePR(ctx context.Context, c vcs.Client, ref vcs.Ref, res *review.Result, summaryPH, titlePH string, autoAppend bool) {
+func (r *Runner) updatePR(ctx context.Context, c vcs.Client, ref vcs.Ref, res *review.Result, bot, summaryPH, titlePH string, autoAppend bool) {
 	if res.TooLarge || len(res.Reviewed) == 0 {
 		// Nothing was reviewed: the summary comment explains why, and a
 		// description block saying so helps nobody.
@@ -155,7 +190,7 @@ func (r *Runner) updatePR(ctx context.Context, c vcs.Client, ref vcs.Ref, res *r
 		return
 	}
 	var title, desc *string
-	if d, changed := review.ApplyDescription(fresh.Body, review.DescriptionBlock(res, r.Cfg.BotName), summaryPH, autoAppend); changed {
+	if d, changed := review.ApplyDescription(fresh.Body, review.DescriptionBlock(res, bot), summaryPH, autoAppend); changed {
 		desc = &d
 	}
 	if t, changed := review.ApplyTitle(fresh.Title, res.SuggestedTitle, titlePH); changed {
@@ -367,12 +402,13 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 		}
 		out.Posted = len(comments) - len(rejected)
 	}
-	summaryPH, titlePH := r.placeholders(rc)
-	body := review.SummaryMarkdown(res, review.SummaryOptions{BotName: r.Cfg.BotName, Rejected: out.Rejected, Posted: out.Posted, Commands: opts.Commands, TitlePlaceholder: titlePH})
+	bot := r.botName(ctx, c, ref.Host)
+	summaryPH, titlePH := placeholders(rc, bot)
+	body := review.SummaryMarkdown(res, review.SummaryOptions{BotName: bot, Rejected: out.Rejected, Posted: out.Posted, Commands: opts.Commands, TitlePlaceholder: titlePH})
 	if err := c.UpsertSummary(ctx, pr, state, body); err != nil {
 		return out, fmt.Errorf("post summary: %w", err)
 	}
-	r.updatePR(ctx, c, ref, res, summaryPH, titlePH, rc.HighLevelSummary == nil || *rc.HighLevelSummary)
+	r.updatePR(ctx, c, ref, res, bot, summaryPH, titlePH, rc.HighLevelSummary == nil || *rc.HighLevelSummary)
 	if !statusDone {
 		r.setStatus(ctx, c, pr, vcs.StatusSuccess, statusLine(res, out.Posted))
 		statusDone = true

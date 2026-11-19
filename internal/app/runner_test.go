@@ -85,6 +85,8 @@ func (g *fakeGitHub) handler(t *testing.T) http.Handler {
 				state = "open"
 			}
 			_, _ = fmt.Fprintf(w, `{"title":"feat: handler","body":"adds A","draft":false,"state":%q,"merged":%v,"html_url":"https://github.com/o/r/pull/7","user":{"login":"dev"},"head":{"ref":"feat","sha":%q},"base":{"ref":"main","sha":"base1"}}`, state, g.merged, g.head)
+		case r.Method == "GET" && p == "/user":
+			_, _ = io.WriteString(w, `{"login":"review-bot"}`)
 		case r.Method == "GET" && p == "/repos/o/r/pulls/7/files":
 			b, _ := json.Marshal(appPatch)
 			_, _ = fmt.Fprintf(w, `[{"filename":"app.go","status":"modified","patch":%s,"changes":4},{"filename":"go.sum","status":"modified","patch":"@@ -1 +1 @@\n-a\n+b","changes":2}]`, b)
@@ -403,6 +405,8 @@ func TestBitbucketEndToEnd(t *testing.T) {
 				return
 			}
 			w.WriteHeader(404)
+		case r.Method == "GET" && p == "/user":
+			w.WriteHeader(403) // repository access tokens have no user: fall back to @codereview
 		case r.Method == "GET" && p == "/repositories/acme/web/pullrequests/7/comments":
 			_, _ = io.WriteString(w, `{"values":[]}`)
 		case r.Method == "POST" && p == "/repositories/acme/web/pullrequests/7/comments":
@@ -481,9 +485,30 @@ func TestNoDescriptionBlockWhenNothingReviewed(t *testing.T) {
 	r := newRunner(t, "http://127.0.0.1:1")
 	client := vcs.NewGitHub(srv.URL, vcs.StaticToken("t"))
 	ref := vcs.Ref{Platform: vcs.GitHub, Host: "github.com", Repo: "o/r", Number: 7}
-	r.updatePR(context.Background(), client, ref, &review.Result{TooLarge: true, Summary: "too many files"}, "@codereview summary", "@codereview", true)
-	r.updatePR(context.Background(), client, ref, &review.Result{Summary: "nothing new"}, "@codereview summary", "@codereview", true)
+	r.updatePR(context.Background(), client, ref, &review.Result{TooLarge: true, Summary: "too many files"}, "codereview", "@codereview summary", "@codereview", true)
+	r.updatePR(context.Background(), client, ref, &review.Result{Summary: "nothing new"}, "codereview", "@codereview summary", "@codereview", true)
 	if len(gh.prPatches) != 0 {
 		t.Errorf("the description must not change when nothing was reviewed: %v", gh.prPatches)
+	}
+}
+
+func TestBotNameFromToken(t *testing.T) {
+	llmSrv, _ := fakeLLM(t, `{"files":[{"path":"app.go","summary":"x"}],"comments":[]}`)
+	gh := &fakeGitHub{head: "head1"}
+	srv := httptest.NewServer(gh.handler(t))
+	defer srv.Close()
+	r := newRunner(t, llmSrv.URL)
+	r.Cfg.BotName = ""
+	client := vcs.NewGitHub(srv.URL, vcs.StaticToken("t"))
+	ref := vcs.Ref{Platform: vcs.GitHub, Host: "github.com", Repo: "o/r", Number: 7}
+	if _, err := r.Review(context.Background(), client, ref, Options{Post: true, Commands: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(gh.summary, "`@review-bot review`") || strings.Contains(gh.summary, "@codereview") {
+		t.Errorf("command hints should mention the token's user: %s", gh.summary)
+	}
+	r.Cfg.BotName = "acme-review"
+	if got := r.botName(context.Background(), client, "github.com"); got != "acme-review" {
+		t.Errorf("an explicit bot_name wins: %s", got)
 	}
 }

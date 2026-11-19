@@ -54,6 +54,10 @@ models:
 # Let repos pick one of the profiles above with `model:` in .codereview.yaml.
 allow_repo_model: false
 
+# Mention handle in summaries and placeholders (@<bot_name> review). Default:
+# the user the code host token belongs to, or "codereview".
+# bot_name: acme-review
+
 review:
   concurrency: 4            # parallel LLM calls per review
   batch_tokens: 40000       # estimated prompt tokens per LLM call
