@@ -58,9 +58,11 @@ type Review struct {
 	// provider:model. Empty uses the review model. A different model (or
 	// provider) catches more of the reviewer's mistakes.
 	VerifyModel string `yaml:"verify_model"`
-	// VerifyCanDrop limits what the verifier may remove: "minor" (default)
-	// lets it drop only minor and nitpick findings and turns disputed major or
-	// critical findings into questions; "all" lets it drop anything.
+	// VerifyCanDrop limits what the verifier may remove. "confident"
+	// (default): minor and nitpick findings, plus major or critical ones it
+	// calls speculative (not a problem in the current code) or is at least
+	// 80% sure are false; other disputed ones become questions. "minor":
+	// only minor and nitpick. "all": anything it disputes.
 	VerifyCanDrop string `yaml:"verify_can_drop"`
 	// VerifyCanAdd lets the verifier add findings it thinks the reviewer
 	// missed. Off by default: additions skip verification themselves, and a

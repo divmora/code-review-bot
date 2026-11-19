@@ -134,12 +134,14 @@ With `--post --score-labels` the scores are also set as labels on the PR/MR, rep
 - GitHub: `Quality Score: 85`.
 Colours follow the score: green 80+, orange 50–79, red below 50.
 
-A second, skeptical **verification pass** (`review.verify`, on by default; one extra model call) checks every finding against the code and the PR description. A different model catches more of the reviewer's mistakes: set `review.verify_model` or pass `--verify-model`. By default (`review.verify_can_drop: minor`) the verifier may remove only minor findings; a major or critical finding it disputes is kept as a question with its reason, and every removal is listed in the summary. The verifier doesn't add findings of its own unless `review.verify_can_add: true`: its additions would go unverified, and in testing one was a false "command injection". The pass:
+A second, skeptical **verification pass** (`review.verify`, on by default; one extra model call) checks every finding against the code and the PR description. A different model catches more of the reviewer's mistakes: set `review.verify_model` or pass `--verify-model`. The verifier classifies each finding as confirmed, false positive, **speculative** (only a problem if the code changed later, e.g. "injection" through a constant) or a question for the author. By default (`review.verify_can_drop: confident`) it removes minor findings it disputes, and major or critical ones that are speculative or that it is at least 80% sure are false; other disputed findings are posted as questions with its reason. `minor` keeps every disputed major finding as a question; `all` drops anything disputed. Every removal is listed in the summary. The verifier doesn't add findings of its own unless `review.verify_can_add: true`: its additions would go unverified, and in testing one was a false "command injection". The pass:
 - it removes false positives;
 - it turns findings that depend on data or configuration into **❓ questions** for the author;
 - with `verify_can_add`, it may add a clearly missed major issue, which still has to pass the same diff validation.
 The summary reports what the pass changed.
 
+
+Scores follow the remaining findings: a dimension with a critical, major or minor issue is capped at 40, 70 or 88; a dimension with no remaining issue of at least minor severity scores at least 85, so questions and findings the verifier removed never pull a score down. The reviewer is told to ask (not accuse) when a change loosens a check, saying what now passes that used to fail, and to back every security finding with input an attacker controls in the current code.
 ## Bitbucket Cloud
 
 Review `https://bitbucket.org/<workspace>/<repo>/pull-requests/<id>` like any other PR. Two kinds of credential work:

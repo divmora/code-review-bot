@@ -84,6 +84,35 @@ func fallbackScores(fs []Finding) Scores {
 	return clampScores(s, scoreCaps(fs))
 }
 
+// scoreFloors raises scores the findings do not support: a dimension with no
+// remaining issue of at least minor severity (questions and findings the
+// verifier removed do not count) scores at least 85, so a disputed or
+// speculative finding cannot drag a score down on its own.
+func scoreFloors(fs []Finding) Scores {
+	f := Scores{Quality: 85, Security: 85, Maintainability: 85}
+	for _, x := range fs {
+		if x.Kind == KindQuestion || !x.Severity.AtLeast(Minor) {
+			continue
+		}
+		switch x.Category {
+		case "security":
+			f.Security = 1
+		case "maintainability", "style", "docs":
+			f.Maintainability = 1
+		default:
+			f.Quality = 1
+		}
+	}
+	return f
+}
+
+// finalScores applies the floors, then the caps.
+func finalScores(s Scores, fs []Finding) Scores {
+	fl := scoreFloors(fs)
+	s.Quality, s.Security, s.Maintainability = max(s.Quality, fl.Quality), max(s.Security, fl.Security), max(s.Maintainability, fl.Maintainability)
+	return clampScores(s, scoreCaps(fs))
+}
+
 func clampScores(s, caps Scores) Scores {
 	fix := func(v, max int) int {
 		if v < 1 {

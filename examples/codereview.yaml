@@ -66,7 +66,7 @@ review:
   context_lines: 60         # larger files: this many lines around each change
   verify: true              # second pass: drop false positives, ask questions, add missed major issues
   verify_model: ""          # e.g. "bedrock:moonshotai.kimi-k2.5": a different model family checks better
-  verify_can_drop: minor    # minor (default): disputed major/critical findings become questions; all: drop anything
+  verify_can_drop: confident  # confident (default): drop speculative or clearly false findings at any severity; minor: only minor/nitpick; all
   verify_can_add: false     # let the verifier add findings it thinks were missed (unverified; off by default)
   repo_config_file: .codereview.yaml
   defaults:                 # same keys as .codereview.yaml; repos override them

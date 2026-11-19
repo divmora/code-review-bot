@@ -24,8 +24,12 @@ For each candidate finding, read the code and decide:
   code the change did not touch, or a style preference presented as a problem. Pay special attention to domain terms:
   words in the PR description or comments (for example "direct", "final", "approve") mean what the codebase uses them
   for (see class and function comments), not their everyday meaning.
+- "speculative": not a problem in the current code; it would only become one if the code changed or were exposed
+  differently later ("if this method is ever called with user input"), or the "dangerous" value is a constant or
+  comes only from trusted internal code. Injection findings need attacker-controlled input reaching the sink.
 - "question": plausible, but whether it is a problem depends on data, runtime configuration or product intent that the
   code shown does not settle. The finding will be posted as a question to the author.
+For every verdict give confidence 0..1: how sure you are of the verdict itself.
 You may adjust severity when the reviewer over- or under-stated it.
 
 Then look for a clearly missed MAJOR or CRITICAL issue in the changed lines, especially in access rules, routing, roles
@@ -49,8 +53,9 @@ var verifySchema = &llm.Schema{
 					"required": []string{"id", "verdict", "reason"},
 					"properties": map[string]any{
 						"id":       map[string]any{"type": "integer"},
-						"verdict":  map[string]any{"type": "string", "enum": []string{"confirmed", "false_positive", "question"}},
-						"reason":   map[string]any{"type": "string"},
+						"verdict":    map[string]any{"type": "string", "enum": []string{"confirmed", "false_positive", "speculative", "question"}},
+						"reason":     map[string]any{"type": "string"},
+						"confidence": map[string]any{"type": "number"},
 						"severity": map[string]any{"type": "string", "enum": []string{"critical", "major", "minor", "nitpick"}},
 					},
 				},
@@ -62,10 +67,11 @@ var verifySchema = &llm.Schema{
 
 type verifyOutput struct {
 	Verdicts []struct {
-		ID       flexInt `json:"id"`
-		Verdict  string  `json:"verdict"`
-		Reason   string  `json:"reason"`
-		Severity string  `json:"severity"`
+		ID         flexInt   `json:"id"`
+		Verdict    string    `json:"verdict"`
+		Reason     string    `json:"reason"`
+		Severity   string    `json:"severity"`
+		Confidence flexFloat `json:"confidence"`
 	} `json:"verdicts"`
 	Missed []struct {
 		Path       string    `json:"path"`
@@ -100,6 +106,32 @@ type RemovedFinding struct {
 	Title  string   `json:"title"`
 	Was    Severity `json:"was"`
 	Reason string   `json:"reason"`
+}
+
+// canDropConfidence is how sure the verifier must be to drop a disputed
+// major or critical finding in the default mode.
+const canDropConfidence = 0.8
+
+// canDrop decides whether a disputed finding is removed (true) or kept as
+// a question (false). Minor and nitpick findings can always be dropped.
+// Modes (review.verify_can_drop):
+//   - "confident" (default): also major and critical findings the verifier
+//     calls speculative, or false positives it is at least 80% sure of;
+//   - "minor": only minor and nitpick (a wrong verifier can never hide a
+//     major finding, at the cost of posting disputed ones as questions);
+//   - "all": anything the verifier disputes.
+func canDrop(mode string, sev Severity, verdict string, confidence float64) bool {
+	if severityRank[sev] <= severityRank[Minor] {
+		return true
+	}
+	switch mode {
+	case "all":
+		return true
+	case "minor":
+		return false
+	default:
+		return verdict == "speculative" || confidence >= canDropConfidence
+	}
 }
 
 // verify runs the verification pass over model findings. Deterministic
@@ -195,11 +227,10 @@ func (e *Engine) verify(ctx context.Context, res *Result, in Input, byPath map[s
 			f.Severity = ParseSeverity(vd.Severity)
 		}
 		switch vd.Verdict {
-		case "false_positive":
-			// By default the verifier may only drop minor findings; a disputed
-			// major or critical finding is kept as a question with the reason,
-			// so a wrong verifier cannot hide a real defect.
-			if e.Limits.VerifyCanDrop != "all" && severityRank[original] > severityRank[Minor] {
+		case "false_positive", "speculative":
+			// Whether a disputed major or critical finding is dropped or kept
+			// as a question depends on verify_can_drop; see canDrop.
+			if !canDrop(e.Limits.VerifyCanDrop, original, vd.Verdict, float64(vd.Confidence)) {
 				f.Kind = KindQuestion
 				f.Severity = Minor
 				if r := strings.TrimSpace(vd.Reason); r != "" {
@@ -210,7 +241,11 @@ func (e *Engine) verify(ctx context.Context, res *Result, in Input, byPath map[s
 			}
 			drop[candidates[n]] = true
 			v.FalsePositives++
-			v.Removed = append(v.Removed, RemovedFinding{Path: f.Path, Line: f.EndLine, Title: f.Title, Was: original, Reason: strings.TrimSpace(vd.Reason)})
+			reason := strings.TrimSpace(vd.Reason)
+			if vd.Verdict == "speculative" {
+				reason = "Speculative (not a problem in the current code). " + reason
+			}
+			v.Removed = append(v.Removed, RemovedFinding{Path: f.Path, Line: f.EndLine, Title: f.Title, Was: original, Reason: reason})
 		case "question":
 			f.Kind = KindQuestion
 			if severityRank[f.Severity] > severityRank[Minor] {
@@ -239,7 +274,7 @@ func (e *Engine) verify(ctx context.Context, res *Result, in Input, byPath map[s
 		if !ok {
 			continue
 		}
-		fd, ok := validate(f, rawComment{int(m.StartLine), int(m.EndLine), m.Severity, m.Category, m.Title, m.Body, m.Suggestion, float64(m.Confidence)})
+		fd, ok := validate(f, rawComment{int(m.StartLine), int(m.EndLine), m.Severity, m.Category, m.Title, m.Body, m.Suggestion, float64(m.Confidence), ""})
 		if !ok {
 			continue
 		}

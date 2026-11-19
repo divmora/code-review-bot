@@ -35,12 +35,23 @@ What to report:
   and the PR description.
 - Read domain terms in the PR description and comments the way this codebase uses them (see class and function
   comments), not in their everyday sense, before claiming the code contradicts the description.
+- Security findings need a concrete path in the current code: name the input an attacker or user controls and show it
+  reaching the dangerous call. Values that are constants, internal literals or come only from trusted code are not
+  vulnerabilities. Do not report what would become a problem only if the code were changed or exposed later ("if this
+  method is ever called with...").
+- Loosened checks: when the change makes a validation, permission, matching rule or other check more permissive
+  (skips rows, adds a fallback or a broader match, removes a condition, turns a failure into a pass), report it with
+  kind "question": say exactly what now passes that used to fail, and ask whether that is intended. This matters most
+  in code that validates payments, money, identities or access. Do not call it a bug unless the code or description
+  shows it is unintended.
 
 Fields:
 - start_line/end_line: NEW-side line numbers from the diff (equal for a single line).
 - severity: critical (exploitable security hole, data loss, crash in common paths), major (a real bug or
   significant risk), minor (edge-case bug, maintainability problem), nitpick (style, naming, small polish).
 - confidence: 0..1, how sure you are that this is a real problem.
+- kind: "issue" (default) for a problem to fix, "question" when the code is plausible but its intent needs the
+  author's confirmation (for example a loosened check).
 - suggestion: the exact replacement text for lines start_line..end_line, keeping indentation, with no code
   fences. Leave it empty when a fix is not a direct replacement of those lines.
 - files[].summary: one or two sentences describing what changed in that file (not problems).
@@ -108,6 +119,7 @@ var reviewSchema = &llm.Schema{
 						"body":       map[string]any{"type": "string", "description": "Markdown explanation: what, why, how to fix"},
 						"suggestion": map[string]any{"type": "string"},
 						"confidence": map[string]any{"type": "number"},
+						"kind":       map[string]any{"type": "string", "enum": []string{"issue", "question"}},
 					},
 				},
 			},
@@ -130,6 +142,7 @@ type reviewOutput struct {
 		Body       string    `json:"body"`
 		Suggestion string    `json:"suggestion"`
 		Confidence flexFloat `json:"confidence"`
+		Kind       string    `json:"kind"`
 	} `json:"comments"`
 }
 
@@ -144,6 +157,8 @@ You get the PR title and description, per-file change summaries and the main rev
   release notes (what changed for users and maintainers), one short sentence each.
 - title: a Conventional Commits title (type(scope): summary), at most 72 characters. title_ok: true when the current
   title already describes the change accurately.
+- Describe behaviour changes neutrally and concretely. When the change makes a check or validation more permissive,
+  say what now passes that used to fail; do not call that a fix or an improvement unless the description says it is.
 - description_check: compare the PR description with the code. Name concrete inaccuracies or important omissions
   (behaviour the code changes that the description does not mention, or claims the code does not support), in one or
   two sentences. When the description is empty, say so and name the two or three things a reviewer should be told.

@@ -72,9 +72,9 @@ func (c *Config) Check() error {
 		checkRef("review.verify_model", c.Review.VerifyModel)
 	}
 	switch c.Review.VerifyCanDrop {
-	case "", "minor", "all":
+	case "", "confident", "minor", "all":
 	default:
-		errs = append(errs, fmt.Errorf("review.verify_can_drop %q: want minor or all", c.Review.VerifyCanDrop))
+		errs = append(errs, fmt.Errorf("review.verify_can_drop %q: want confident, minor or all", c.Review.VerifyCanDrop))
 	}
 	switch c.Review.Defaults.Profile {
 	case "", Chill, Balanced, Assertive:

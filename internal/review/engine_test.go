@@ -559,3 +559,90 @@ func TestRepeatedFindingsStillCountForScores(t *testing.T) {
 		t.Errorf("a still-present critical issue must keep security capped: %+v", res.Scores)
 	}
 }
+
+// TestSpeculativeAndLoosenedChecks reproduces a real review: a speculative
+// "SQL injection" through an internal constant was posted as a question and
+// dragged Security to 60, while loosened validation checks went unmentioned.
+func TestSpeculativeAndLoosenedChecks(t *testing.T) {
+	fake := &scripted{
+		review: func(req llm.Request) (string, error) {
+			for _, want := range []string{"attacker or user controls", "Loosened checks", `kind "question"`} {
+				if !strings.Contains(req.System, want) {
+					t.Errorf("reviewer prompt should contain %q", want)
+				}
+			}
+			return `{"files":[],"comments":[
+				{"path":"main.go","start_line":4,"end_line":4,"severity":"major","category":"security","title":"SQL injection via column name","body":"if ever exposed","confidence":0.7},
+				{"path":"main.go","start_line":5,"end_line":5,"severity":"major","category":"bug","title":"wrong total","body":"x","confidence":0.6},
+				{"path":"main.go","start_line":6,"end_line":6,"severity":"major","category":"security","title":"rows without an id now pass the check","body":"used to fail","confidence":0.8,"kind":"question"}
+			]}`, nil
+		},
+		verify: `{"verdicts":[
+				{"id":1,"verdict":"speculative","reason":"the column is a hardcoded literal","confidence":0.6},
+				{"id":2,"verdict":"false_positive","reason":"the total is recomputed below","confidence":0.9},
+				{"id":3,"verdict":"question","reason":"intent unclear","confidence":0.7}
+			],"missed":[]}`,
+		summary: `{"summary":"s","cohorts":[],"effort":2,"scores":{"quality":70,"security":60,"maintainability":90}}`,
+	}
+	files := testFiles(t)[:1]
+	files[0].Hunks[0].Lines[6].Text = "\tx := 3"
+	res, err := (&Engine{LLM: fake, Limits: limits(), Logger: quiet}).Run(context.Background(), Input{Files: files, Repo: defaults()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range res.Findings {
+		got = append(got, f.Title+"/"+f.Kind+"/"+string(f.Severity))
+	}
+	if strings.Join(got, ",") != "rows without an id now pass the check/question/minor" {
+		t.Fatalf("speculative and confidently-false majors must be dropped, the loosened check kept as a question: %v", got)
+	}
+	v := res.Verification
+	if v.FalsePositives != 2 || len(v.Removed) != 2 || !strings.HasPrefix(v.Removed[0].Reason, "Speculative") {
+		t.Errorf("removed findings should be listed: %+v", v.Removed)
+	}
+	if res.Scores.Security != 85 || res.Scores.Quality != 85 || res.Scores.Maintainability != 90 {
+		t.Errorf("scores with no remaining issue must not stay low: %+v", res.Scores)
+	}
+
+	// verify_can_drop: minor keeps the old behaviour: disputed majors become questions.
+	lim := limits()
+	lim.VerifyCanDrop = "minor"
+	res, _ = (&Engine{LLM: fake, Limits: lim, Logger: quiet}).Run(context.Background(), Input{Files: files, Repo: defaults()})
+	if len(res.Findings) != 3 || res.Verification.FalsePositives != 0 {
+		t.Errorf("minor mode must not drop majors: %+v", res.Findings)
+	}
+}
+
+func TestCanDrop(t *testing.T) {
+	for _, c := range []struct {
+		mode    string
+		sev     Severity
+		verdict string
+		conf    float64
+		want    bool
+	}{
+		{"", Minor, "false_positive", 0, true},
+		{"", Major, "false_positive", 0.5, false},
+		{"", Major, "false_positive", 0.8, true},
+		{"", Critical, "speculative", 0.1, true},
+		{"confident", Critical, "false_positive", 0.79, false},
+		{"minor", Critical, "speculative", 1, false},
+		{"all", Critical, "false_positive", 0, true},
+	} {
+		if got := canDrop(c.mode, c.sev, c.verdict, c.conf); got != c.want {
+			t.Errorf("canDrop(%q,%s,%s,%.2f) = %v", c.mode, c.sev, c.verdict, c.conf, got)
+		}
+	}
+}
+
+func TestScoreFloors(t *testing.T) {
+	fs := []Finding{{Category: "security", Severity: Major, Kind: KindQuestion}, {Category: "bug", Severity: Nitpick}}
+	if s := finalScores(Scores{Quality: 40, Security: 30, Maintainability: 95}, fs); s.Security != 85 || s.Quality != 85 || s.Maintainability != 95 {
+		t.Errorf("questions and nitpicks do not support low scores: %+v", s)
+	}
+	fs = append(fs, Finding{Category: "security", Severity: Major})
+	if s := finalScores(Scores{Quality: 90, Security: 30, Maintainability: 95}, fs); s.Security != 30 {
+		t.Errorf("a remaining major security issue keeps the model's low score: %+v", s)
+	}
+}

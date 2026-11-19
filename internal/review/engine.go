@@ -329,7 +329,7 @@ func (e *Engine) Run(ctx context.Context, in Input) (*Result, error) {
 				res.Dropped++
 				continue
 			}
-			fd, ok := validate(f, rawComment{int(c.StartLine), int(c.EndLine), c.Severity, c.Category, c.Title, c.Body, c.Suggestion, float64(c.Confidence)})
+			fd, ok := validate(f, rawComment{int(c.StartLine), int(c.EndLine), c.Severity, c.Category, c.Title, c.Body, c.Suggestion, float64(c.Confidence), c.Kind})
 			if !ok {
 				res.Dropped++
 				continue
@@ -607,6 +607,7 @@ type rawComment struct {
 	severity, category   string
 	title, body, suggest string
 	confidence           float64
+	kind                 string // "question" or "issue"
 }
 
 // validate maps a model comment onto the diff. The range must sit inside
@@ -660,6 +661,12 @@ func validate(f *diff.File, c rawComment) (Finding, bool) {
 	}
 	if endLine.Kind == diff.Context {
 		fd.OldLine = endLine.OldNo
+	}
+	if strings.EqualFold(strings.TrimSpace(c.kind), KindQuestion) {
+		fd.Kind = KindQuestion
+		if severityRank[fd.Severity] > severityRank[Minor] {
+			fd.Severity = Minor // a question is not a defect until answered
+		}
 	}
 	if keepSuggestion {
 		fd.Suggestion = cleanSuggestion(c.suggest)
@@ -1031,7 +1038,7 @@ func (e *Engine) walkthrough(ctx context.Context, res *Result, in Input, files [
 		sc := fallbackScores(all)
 		res.Scores = &sc
 	} else {
-		sc := clampScores(Scores{Quality: int(out.Scores.Quality), Security: int(out.Scores.Security), Maintainability: int(out.Scores.Maintainability)}, scoreCaps(all))
+		sc := finalScores(Scores{Quality: int(out.Scores.Quality), Security: int(out.Scores.Security), Maintainability: int(out.Scores.Maintainability)}, all)
 		res.Scores = &sc
 	}
 }
