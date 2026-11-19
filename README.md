@@ -95,7 +95,7 @@ Every response is also parsed leniently (fenced or prose-wrapped JSON), so weake
 
 <!-- x-release-please-start-version -->
 ```yaml
-- uses: divmora/code-review-bot@v0.3.0
+- uses: divmora/code-review-bot@v0.4.0
   with:
     model: anthropic:claude-sonnet-5-5
     fail-on: critical          # optional gate

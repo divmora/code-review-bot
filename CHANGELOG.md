@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0](https://github.com/divmora/code-review-bot/compare/v0.3.0...v0.4.0) (2026-11-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* github.com/divmora/code-review-bot/pkg/{llm,config,review,app} are no longer importable. Run the CLI instead; pkg/vcs and pkg/diff remain.
+
+### Features
+
+* drop speculative findings, ask about loosened checks, back scores with findings ([bbda5dc](https://github.com/divmora/code-review-bot/commit/bbda5dc6123afa8f4291e88a3757193dc90742dc))
+* make the CLI the only interface and add config validate ([ae5b0f0](https://github.com/divmora/code-review-bot/commit/ae5b0f09a805c994377dfa751751aa3b8137bed1))
+* name the bot after the token's user by default ([a2a7467](https://github.com/divmora/code-review-bot/commit/a2a7467554112c20da0248e4fda9c0ffb000f112))
+* optional multi-pass reviews; verify repeated findings ([a14704a](https://github.com/divmora/code-review-bot/commit/a14704aa1de5f22c3eb4ed6b299fc8134e782b74))
+* team learnings and the learn command ([0af54b4](https://github.com/divmora/code-review-bot/commit/0af54b4e8c4bae6f64ca6ab7adefeb67663482b4))
+
+
+### Bug Fixes
+
+* skip closed and merged pull requests, keep the description when nothing was reviewed ([eaef244](https://github.com/divmora/code-review-bot/commit/eaef24442c4690d92c10b58fcc20ff7ed2fe8eeb))
+
 ## [0.3.0](https://github.com/divmora/code-review-bot/compare/v0.2.0...v0.3.0) (2026-11-19)
 
 
