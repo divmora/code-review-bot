@@ -4,7 +4,7 @@ Thanks for helping improve Code Review Bot. Bug reports, provider additions and 
 
 ## Prerequisites
 
-- Go 1.26+
+- Go 1.27+
 - git (used by `review --local` and its tests)
 - Docker (optional, for image builds)
 

@@ -36,7 +36,7 @@ runs:
   steps:
     - uses: actions/setup-go@v5
       with:
-        go-version: "1.26"
+        go-version: "1.27"
         cache: false
     - name: Install codereview
       shell: bash

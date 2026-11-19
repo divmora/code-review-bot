@@ -66,7 +66,7 @@ databases belong in the console. Don't add a long-running server here.
 
 ## Conventions
 
-- Go 1.26, stdlib first (only deps: AWS SDK v2 for Bedrock, yaml.v3). `log/slog` everywhere.
+- Go 1.27, stdlib first (only deps: AWS SDK v2 for Bedrock, yaml.v3). `log/slog` everywhere.
 - Wrap errors with context. Propagate `context.Context`.
 - `make test` runs everything with `-race`; tests must not need network or credentials.
 - Version lives in `internal/version` as `0.0.0-dev`, injected by GoReleaser.
