@@ -6,22 +6,26 @@ Guidance for AI coding agents and contributors. Org-wide rules live in
 ## Layout
 
 ```
-cmd/codereview/   CLI: review (one PR per run), ask, models, ping, version
-pkg/llm/          provider-neutral LLM client + providers (openai*, anthropic, gemini, bedrock)
+cmd/codereview/   CLI: review (one PR per run), ask, models, ping, config validate, version
 pkg/diff/         unified diff parser, commentable-line logic, annotated rendering
-pkg/config/       engine config (models, code hosts, limits), .codereview.yaml, Overrides, globs
 pkg/vcs/          code hosts: GitHub (token or App), GitLab, Bitbucket Cloud, local git; bot-state
                   markers (Bitbucket gets them as Markdown link references: no HTML there)
-pkg/review/       engine: filtering, secret scan, batching, prompts, validation, ranking, rendering
-pkg/app/          Runner: the review/ask flow
+internal/llm/     provider-neutral LLM client + providers (openai*, anthropic, gemini, bedrock)
+internal/config/  engine config (models, code hosts, limits), .codereview.yaml, Overrides, globs,
+                  strict validation (config validate)
+internal/review/  engine: filtering, secret scan, batching, prompts, validation, ranking, rendering
+internal/app/     Runner: the review/ask flow
 internal/version  build version
 examples/         config examples and CI templates (kept loadable by tests)
 action.yml        GitHub Action (composite; installs the CLI at the action ref)
 ```
 
-`pkg/` is a public API: Divmora Code Review Console (BSL, separate repo) imports `pkg/vcs` and
-`pkg/config` and runs this CLI through executors. Keep `pkg/` changes backward compatible, and keep
-the CLI contract (flags, `CODEREVIEW_OVERRIDES`, JSON output, exit codes in README) stable.
+The CLI contract is the interface for other programs: flags, `CODEREVIEW_CONFIG_YAML`,
+`CODEREVIEW_OVERRIDES`, JSON output, `config validate` and exit codes (see README). Keep it
+stable. Divmora Code Review Console (BSL, separate repo) builds config YAML itself and runs this
+CLI through executors; the only Go packages it imports are `pkg/vcs` (and `pkg/diff` through it),
+so those are the only public packages. Keep them backward compatible; everything else is
+`internal/` and free to change.
 
 **Scope:** this repo is the CLI and engine only. Webhooks, queues, dashboards, admin, SSO and
 databases belong in the console. Don't add a long-running server here.
@@ -60,10 +64,11 @@ databases belong in the console. Don't add a long-running server here.
 
 ## Adding things
 
-- **Provider**: new file in `pkg/llm`, `Register` in `init`, test request/response shape. If
+- **Provider**: new file in `internal/llm`, `Register` in `init`, test request/response shape. If
   it speaks the OpenAI API, add an entry to `compatProviders` instead.
 - **Code host**: implement `vcs.Client` and add URL/CI detection.
 - **Config key**: update `examples/`, `README.md` and the `TestExamplesParse` expectations.
+  `config validate` rejects unknown keys, so the console must learn a new key before it sends it.
 
 ## Conventions
 

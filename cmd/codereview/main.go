@@ -20,11 +20,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/divmora/code-review-bot/internal/app"
+	"github.com/divmora/code-review-bot/internal/config"
+	"github.com/divmora/code-review-bot/internal/llm"
+	"github.com/divmora/code-review-bot/internal/review"
 	"github.com/divmora/code-review-bot/internal/version"
-	"github.com/divmora/code-review-bot/pkg/app"
-	"github.com/divmora/code-review-bot/pkg/config"
-	"github.com/divmora/code-review-bot/pkg/llm"
-	"github.com/divmora/code-review-bot/pkg/review"
 	"github.com/divmora/code-review-bot/pkg/vcs"
 )
 
@@ -35,6 +35,7 @@ Usage:
   codereview ask PR_URL "question"     Ask a question about a pull/merge request
   codereview models [flags]            Show providers, model profiles and the active model chain
   codereview ping [flags]              Send a tiny request to check model credentials
+  codereview config validate [flags]   Check the config (and $CODEREVIEW_OVERRIDES) without calling a model
   codereview version
 
 Pick a model with --model, CODEREVIEW_MODEL or "model:" in codereview.yaml:
@@ -62,6 +63,8 @@ func main() {
 		err = cmdModels(os.Args[2:])
 	case "ping":
 		err = cmdPing(ctx, os.Args[2:])
+	case "config":
+		err = cmdConfig(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println(version.Version)
 	case "help", "-h", "--help":
@@ -371,6 +374,97 @@ func cmdPing(ctx context.Context, args []string) error {
 	}
 	if failed > 0 {
 		return fmt.Errorf("%d of %d models failed", failed, len(chain))
+	}
+	return nil
+}
+
+// cmdConfig validates the config strictly: unknown keys, model profiles and
+// providers, the model chain, the verify model, and CODEREVIEW_OVERRIDES
+// when set. Divmora Code Review Console runs it through its executor, so
+// the binary that will run reviews is the one that judges the config.
+func cmdConfig(args []string) error {
+	if len(args) == 0 || args[0] != "validate" {
+		return fmt.Errorf("usage: codereview config validate [--config FILE] [--format text|json]")
+	}
+	fs := flag.NewFlagSet("config validate", flag.ExitOnError)
+	path := fs.String("config", "", "config file (default ./codereview.yaml, $CODEREVIEW_CONFIG or $CODEREVIEW_CONFIG_YAML)")
+	format := fs.String("format", "text", "output: text or json")
+	_ = fs.Parse(args[1:])
+
+	type report struct {
+		OK      bool     `json:"ok"`
+		Source  string   `json:"source,omitempty"`
+		Chain   []string `json:"model_chain,omitempty"`
+		Verify  string   `json:"verify_model,omitempty"`
+		Models  []string `json:"profiles,omitempty"`
+		Errors  []string `json:"errors,omitempty"`
+		Version string   `json:"version"`
+	}
+	rep := report{Version: version.Version}
+	fail := func(err error) {
+		rep.Errors = append(rep.Errors, strings.Split(err.Error(), "\n")...)
+	}
+	name, data, err := config.Source(*path)
+	rep.Source = name
+	var cfg *config.Config
+	if err == nil {
+		cfg, err = config.Strict(name, data)
+	}
+	if err != nil {
+		fail(err)
+	}
+	if cfg != nil {
+		for n := range cfg.Models {
+			rep.Models = append(rep.Models, n)
+		}
+		sort.Strings(rep.Models)
+		if chain, err := cfg.ModelChain(""); err == nil {
+			for _, m := range chain {
+				rep.Chain = append(rep.Chain, m.String())
+			}
+		}
+		if v := cfg.Review.VerifyModel; v != "" {
+			if m, err := cfg.ResolveModel(v); err == nil {
+				rep.Verify = m.String()
+			}
+		}
+		if _, err := overridesFromEnv(cfg); err != nil {
+			fail(err)
+		}
+	}
+	rep.OK = len(rep.Errors) == 0
+
+	if *format == "json" {
+		b, _ := json.MarshalIndent(rep, "", "  ")
+		if err := writeReport("", string(b)+"\n"); err != nil {
+			return err
+		}
+	} else {
+		src := rep.Source
+		if src == "" {
+			src = "defaults and environment"
+		}
+		if rep.OK {
+			fmt.Printf("✓ config ok (%s)\n", src)
+		} else {
+			fmt.Printf("✗ config has %d problem(s) (%s)\n", len(rep.Errors), src)
+			for _, e := range rep.Errors {
+				fmt.Println("  -", e)
+			}
+		}
+		if len(rep.Chain) > 0 {
+			fmt.Println("  model chain:", strings.Join(rep.Chain, " -> "))
+		}
+		if rep.Verify != "" {
+			fmt.Println("  verify model:", rep.Verify)
+		}
+	}
+	if !rep.OK {
+		if *format == "json" {
+			// Executors report the stderr error line; keep the reasons there too.
+			return fmt.Errorf("config is invalid: %s", strings.Join(rep.Errors, "; "))
+		}
+		return exitCode(1)
 	}
 	return nil
 }

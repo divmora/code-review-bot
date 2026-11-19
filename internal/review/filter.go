@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/divmora/code-review-bot/pkg/config"
+	"github.com/divmora/code-review-bot/internal/config"
 	"github.com/divmora/code-review-bot/pkg/diff"
 )
 

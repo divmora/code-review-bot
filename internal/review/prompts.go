@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/divmora/code-review-bot/pkg/config"
-	"github.com/divmora/code-review-bot/pkg/llm"
+	"github.com/divmora/code-review-bot/internal/config"
+	"github.com/divmora/code-review-bot/internal/llm"
 )
 
 const reviewSystem = `You are a senior software engineer doing a code review of a pull request.

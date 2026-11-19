@@ -15,8 +15,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/divmora/code-review-bot/pkg/config"
-	"github.com/divmora/code-review-bot/pkg/llm"
+	"github.com/divmora/code-review-bot/internal/config"
+	"github.com/divmora/code-review-bot/internal/llm"
 	"github.com/divmora/code-review-bot/pkg/vcs"
 )
 

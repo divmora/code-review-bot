@@ -163,3 +163,11 @@ func isNetErr(err error) bool {
 	var ne net.Error
 	return errors.As(err, &ne)
 }
+
+// Known reports whether a provider is registered.
+func Known(provider string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	_, ok := factories[strings.ToLower(provider)]
+	return ok
+}

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/divmora/code-review-bot/internal/llm"
 	"github.com/divmora/code-review-bot/pkg/diff"
-	"github.com/divmora/code-review-bot/pkg/llm"
 )
 
 // The verification pass is a second, skeptical model call. It sees the same

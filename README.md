@@ -44,6 +44,7 @@ export CODEREVIEW_MODEL=anthropic:claude-sonnet-5-5   ANTHROPIC_API_KEY=...
 # export CODEREVIEW_MODEL=bedrock:<model-id>          AWS_REGION=us-east-1 (+ any AWS credential source)
 # export CODEREVIEW_MODEL=ollama:qwen2.5-coder:14b    (local, no key)
 
+codereview config validate                       # check the config without calling a model
 codereview ping                                  # check the model and credentials
 codereview review --local                        # uncommitted changes
 codereview review --local --base origin/main     # your branch vs main
@@ -86,7 +87,7 @@ models:
 
 Every response is also parsed leniently (fenced or prose-wrapped JSON), so weaker models still work. `codereview models` prints the active chain; `codereview ping` tests every model in it.
 
-**Adding a provider** means implementing `llm.Client` (`Name`, `Complete`) and calling `llm.Register("name", factory)`. See [`pkg/llm`](pkg/llm).
+**Adding a provider** means implementing `llm.Client` (`Name`, `Complete`) and calling `llm.Register("name", factory)`. See [`internal/llm`](internal/llm).
 
 ## Run in CI
 
@@ -111,12 +112,13 @@ Every response is also parsed leniently (fenced or prose-wrapped JSON), so weake
 
 ## Use from another program
 
-The CLI is designed to be driven by schedulers such as Divmora Code Review Console:
+The CLI is designed to be driven by schedulers such as Divmora Code Review Console. Its flags, environment variables, JSON output and exit codes are the interface; the Go packages are not, apart from `pkg/vcs` and `pkg/diff`:
 
 | Input | How |
 |---|---|
 | Which PR | the URL argument, or detected from GitHub Actions / GitLab CI variables |
-| Engine config | `--config codereview.yaml` (model profiles, limits; reference keys with `api_key_env`) |
+| Engine config | `--config codereview.yaml`, or the YAML itself in `CODEREVIEW_CONFIG_YAML` (model profiles, limits; reference keys with `api_key_env`) |
+| Checking input | `codereview config validate [--format json]`: rejects unknown keys, unknown providers, unresolvable models and invalid `CODEREVIEW_OVERRIDES`, without calling a model. Exit `1` when invalid |
 | Secrets | environment only: provider keys, `GITHUB_TOKEN`, `GITLAB_TOKEN` |
 | Per-repo admin settings | `CODEREVIEW_OVERRIDES` JSON: `profile`, `max_comments`, `min_severity`, `model`, `auto_review`, `drafts`, `instructions` |
 | Output | `--format json`: the full result (findings, summary, usage), plus `posted`, `rejected` and `pr_url`; `{"skipped": true, "skip_reason": ...}` when skipped |
@@ -218,6 +220,7 @@ auto_review:
 | `ask URL "question"` | Answer a question about a PR (`--post` to reply on it) |
 | `models` | List providers, profiles and the active chain |
 | `ping` | Test each model in the chain |
+| `config validate` | Check the config strictly (unknown keys, providers, model chain, verify model) and `CODEREVIEW_OVERRIDES`; `--format json` for programs |
 | `version` | Print version |
 
 Common flags: `--config`, `--model`, `--verbose`.

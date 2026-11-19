@@ -10,7 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/divmora/code-review-bot/pkg/llm"
+	"github.com/divmora/code-review-bot/internal/llm"
 )
 
 // Config is the operator config shared by the CLI and the server.
@@ -103,7 +103,28 @@ var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 // Load reads a config file. An empty path or a missing default file
 // yields defaults, so the CLI works with env vars alone.
 func Load(path string) (*Config, error) {
+	name, data, err := Source(path)
+	if err != nil {
+		return nil, err
+	}
 	cfg := &Config{}
+	if len(data) > 0 {
+		if err := yaml.Unmarshal(ExpandEnv(data), cfg); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", sourceLabel(name), err)
+		}
+	}
+	cfg.Finalize()
+	return cfg, nil
+}
+
+// InlineEnv holds the whole config as YAML. Executors (containers,
+// Kubernetes Jobs) use it instead of a file.
+const InlineEnv = "CODEREVIEW_CONFIG_YAML"
+
+// Source returns the raw config Load reads and where it came from: path,
+// $CODEREVIEW_CONFIG, ./codereview.yaml, then $CODEREVIEW_CONFIG_YAML. No
+// config at all returns empty data and no error.
+func Source(path string) (string, []byte, error) {
 	explicit := path != ""
 	if path == "" {
 		path = os.Getenv("CODEREVIEW_CONFIG")
@@ -117,28 +138,27 @@ func Load(path string) (*Config, error) {
 			}
 		}
 	}
-	if path == "" && os.Getenv("CODEREVIEW_CONFIG_YAML") != "" {
-		// Inline config, used by executors (containers, Kubernetes Jobs).
-		if err := yaml.Unmarshal(ExpandEnv([]byte(os.Getenv("CODEREVIEW_CONFIG_YAML"))), cfg); err != nil {
-			return nil, fmt.Errorf("parse CODEREVIEW_CONFIG_YAML: %w", err)
+	if path == "" {
+		if v := os.Getenv(InlineEnv); v != "" {
+			return InlineEnv, []byte(v), nil
 		}
-		cfg.Finalize()
-		return cfg, nil
+		return "", nil, nil
 	}
-	if path != "" {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			if explicit || !os.IsNotExist(err) {
-				return nil, fmt.Errorf("read config: %w", err)
-			}
-		} else {
-			if err := yaml.Unmarshal(ExpandEnv(data), cfg); err != nil {
-				return nil, fmt.Errorf("parse config %s: %w", path, err)
-			}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if explicit || !os.IsNotExist(err) {
+			return path, nil, fmt.Errorf("read config: %w", err)
 		}
+		return "", nil, nil
 	}
-	cfg.Finalize()
-	return cfg, nil
+	return path, data, nil
+}
+
+func sourceLabel(name string) string {
+	if name == InlineEnv {
+		return name
+	}
+	return "config " + name
 }
 
 // ExpandEnv replaces ${VAR} references with environment values. Only the
