@@ -17,6 +17,7 @@ import (
 
 	"github.com/divmora/code-review-bot/internal/config"
 	"github.com/divmora/code-review-bot/internal/llm"
+	"github.com/divmora/code-review-bot/internal/review"
 	"github.com/divmora/code-review-bot/pkg/vcs"
 )
 
@@ -64,6 +65,8 @@ type fakeGitHub struct {
 	compare     []string
 	prPatches   []map[string]any
 	statuses    []map[string]any
+	state       string // "" = open
+	merged      bool
 }
 
 func (g *fakeGitHub) handler(t *testing.T) http.Handler {
@@ -77,7 +80,11 @@ func (g *fakeGitHub) handler(t *testing.T) http.Handler {
 		p := r.URL.Path
 		switch {
 		case r.Method == "GET" && p == "/repos/o/r/pulls/7":
-			_, _ = fmt.Fprintf(w, `{"title":"feat: handler","body":"adds A","draft":false,"html_url":"https://github.com/o/r/pull/7","user":{"login":"dev"},"head":{"ref":"feat","sha":%q},"base":{"ref":"main","sha":"base1"}}`, g.head)
+			state := g.state
+			if state == "" {
+				state = "open"
+			}
+			_, _ = fmt.Fprintf(w, `{"title":"feat: handler","body":"adds A","draft":false,"state":%q,"merged":%v,"html_url":"https://github.com/o/r/pull/7","user":{"login":"dev"},"head":{"ref":"feat","sha":%q},"base":{"ref":"main","sha":"base1"}}`, state, g.merged, g.head)
 		case r.Method == "GET" && p == "/repos/o/r/pulls/7/files":
 			b, _ := json.Marshal(appPatch)
 			_, _ = fmt.Fprintf(w, `[{"filename":"app.go","status":"modified","patch":%s,"changes":4},{"filename":"go.sum","status":"modified","patch":"@@ -1 +1 @@\n-a\n+b","changes":2}]`, b)
@@ -438,5 +445,45 @@ func TestBitbucketEndToEnd(t *testing.T) {
 	}
 	if len(statuses) != 2 || statuses[0]["state"] != "INPROGRESS" || statuses[1]["state"] != "SUCCESSFUL" {
 		t.Errorf("build statuses = %v", statuses)
+	}
+}
+
+func TestClosedPullRequests(t *testing.T) {
+	llmSrv, prompts := fakeLLM(t, `{"files":[],"comments":[]}`)
+	for _, c := range []struct {
+		state  string
+		merged bool
+		want   string
+	}{{"closed", false, "pull request is closed"}, {"closed", true, "pull request is merged"}} {
+		gh := &fakeGitHub{head: "head1", state: c.state, merged: c.merged}
+		srv := httptest.NewServer(gh.handler(t))
+		r := newRunner(t, llmSrv.URL)
+		client := vcs.NewGitHub(srv.URL, vcs.StaticToken("t"))
+		ref := vcs.Ref{Platform: vcs.GitHub, Host: "github.com", Repo: "o/r", Number: 7}
+		out, err := r.Review(context.Background(), client, ref, Options{Auto: true, Post: true})
+		srv.Close()
+		if err != nil || out.SkipReason != c.want {
+			t.Errorf("%s/merged=%v: skip=%q err=%v", c.state, c.merged, out.SkipReason, err)
+		}
+		if len(gh.reviews)+len(gh.issueNotes) != 0 || len(gh.prPatches) != 0 {
+			t.Errorf("nothing may be posted on a %s PR", c.want)
+		}
+	}
+	if len(*prompts) != 0 {
+		t.Errorf("no model calls for closed PRs, got %d", len(*prompts))
+	}
+}
+
+func TestNoDescriptionBlockWhenNothingReviewed(t *testing.T) {
+	gh := &fakeGitHub{head: "head1"}
+	srv := httptest.NewServer(gh.handler(t))
+	defer srv.Close()
+	r := newRunner(t, "http://127.0.0.1:1")
+	client := vcs.NewGitHub(srv.URL, vcs.StaticToken("t"))
+	ref := vcs.Ref{Platform: vcs.GitHub, Host: "github.com", Repo: "o/r", Number: 7}
+	r.updatePR(context.Background(), client, ref, &review.Result{TooLarge: true, Summary: "too many files"}, "@codereview summary", "@codereview", true)
+	r.updatePR(context.Background(), client, ref, &review.Result{Summary: "nothing new"}, "@codereview summary", "@codereview", true)
+	if len(gh.prPatches) != 0 {
+		t.Errorf("the description must not change when nothing was reviewed: %v", gh.prPatches)
 	}
 }

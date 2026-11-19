@@ -61,7 +61,16 @@ type PR struct {
 	StartSHA   string // GitLab diff_refs.start_sha
 	Draft      bool
 	URL        string
+	// State is open, closed or merged ("" when unknown, e.g. local).
+	State string
 }
+
+// PR states.
+const (
+	StateOpen   = "open"
+	StateClosed = "closed"
+	StateMerged = "merged"
+)
 
 // Comment is an inline review comment on the new side of the diff.
 type Comment struct {

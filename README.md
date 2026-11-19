@@ -161,6 +161,8 @@ The bot keeps its state **on the PR itself**, so a fresh CI job needs no databas
 
 - **The summary comment records the reviewed commit,** visibly ("Commit: `a2ebf75e`") and in a hidden marker (`<!-- codereview:reviewed_sha=... -->`), together with the per-file summaries.
 - **On a new push** only files changed since that commit are reviewed; a force-push falls back to a full review. With `--auto`, a commit that was already reviewed is skipped.
+- **Closed or merged PRs are not reviewed with `--auto`** (a pipeline can run after the MR was closed). Run without `--auto` to review one anyway.
+- **When nothing was reviewed** (too many files, or no new reviewable changes), the summary comment says why and the PR description is left alone.
 - **Findings already on the PR are never posted twice,** even when the model words them differently on a later run. The bot matches each new finding against its existing comments by file, nearby line and topic, not just an exact fingerprint. Repeats still count towards the scores, so a re-run doesn't inflate them. Two phrasings of the same problem within one run are merged. The summary comment, the description block and the score labels are all edited in place.
 - **With `--commit-status`,** each reviewed commit also gets a `codereview` status in the MR/PR commit list and checks: *running* during the review, then *success* ("Reviewed: 2 comments · Quality 60 · Security 100 · Maintainability 72") or *failed*. GitHub Actions needs `statuses: write` for this.
 

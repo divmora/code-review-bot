@@ -119,6 +119,7 @@ func (b *BitbucketClient) GetPR(ctx context.Context, ref Ref) (*PR, error) {
 		Author: firstNonEmpty(v.Author.Nickname, v.Author.DisplayName), Draft: v.Draft,
 		URL: v.Links.HTML.Href, BaseBranch: v.Destination.Branch.Name, HeadBranch: v.Source.Branch.Name,
 		BaseSHA: base, HeadSHA: head,
+		State: map[string]string{"OPEN": StateOpen, "MERGED": StateMerged, "DECLINED": StateClosed, "SUPERSEDED": StateClosed}[v.State],
 	}, nil
 }
 

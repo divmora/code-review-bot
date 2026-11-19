@@ -53,6 +53,7 @@ func (g *GitLabClient) GetPR(ctx context.Context, ref Ref) (*PR, error) {
 		Description    string `json:"description"`
 		Draft          bool   `json:"draft"`
 		WorkInProgress bool   `json:"work_in_progress"`
+		State          string `json:"state"` // opened, closed, locked, merged
 		WebURL         string `json:"web_url"`
 		SourceBranch   string `json:"source_branch"`
 		TargetBranch   string `json:"target_branch"`
@@ -85,6 +86,7 @@ func (g *GitLabClient) GetPR(ctx context.Context, ref Ref) (*PR, error) {
 		Draft: v.Draft || v.WorkInProgress, URL: v.WebURL,
 		BaseBranch: v.TargetBranch, HeadBranch: v.SourceBranch,
 		BaseSHA: v.DiffRefs.BaseSHA, HeadSHA: firstNonEmpty(v.DiffRefs.HeadSHA, v.SHA), StartSHA: v.DiffRefs.StartSHA,
+		State: map[string]string{"opened": StateOpen, "locked": StateOpen, "closed": StateClosed, "merged": StateMerged}[v.State],
 	}, nil
 }
 

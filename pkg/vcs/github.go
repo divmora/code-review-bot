@@ -64,6 +64,8 @@ func (g *GitHubClient) GetPR(ctx context.Context, ref Ref) (*PR, error) {
 		Title   string `json:"title"`
 		Body    string `json:"body"`
 		Draft   bool   `json:"draft"`
+		State   string `json:"state"` // open, closed
+		Merged  bool   `json:"merged"`
 		HTMLURL string `json:"html_url"`
 		User    struct {
 			Login string `json:"login"`
@@ -80,9 +82,13 @@ func (g *GitHubClient) GetPR(ctx context.Context, ref Ref) (*PR, error) {
 	if _, err := g.r.do(ctx, "GET", fmt.Sprintf("/repos/%s/pulls/%d", repoPath(ref.Repo), ref.Number), nil, &v); err != nil {
 		return nil, err
 	}
+	state := v.State
+	if v.Merged {
+		state = StateMerged
+	}
 	return &PR{
 		Ref: ref, Title: v.Title, Body: v.Body, Author: v.User.Login, Draft: v.Draft, URL: v.HTMLURL,
-		BaseBranch: v.Base.Ref, HeadBranch: v.Head.Ref, BaseSHA: v.Base.SHA, HeadSHA: v.Head.SHA,
+		BaseBranch: v.Base.Ref, HeadBranch: v.Head.Ref, BaseSHA: v.Base.SHA, HeadSHA: v.Head.SHA, State: state,
 	}, nil
 }
 

@@ -144,6 +144,11 @@ func (r *Runner) placeholders(rc config.RepoConfig) (summary, title string) {
 // again first so edits made during the review are not lost. Failures are
 // logged: the review itself is already posted.
 func (r *Runner) updatePR(ctx context.Context, c vcs.Client, ref vcs.Ref, res *review.Result, summaryPH, titlePH string, autoAppend bool) {
+	if res.TooLarge || len(res.Reviewed) == 0 {
+		// Nothing was reviewed: the summary comment explains why, and a
+		// description block saying so helps nobody.
+		return
+	}
 	fresh, err := c.GetPR(ctx, ref)
 	if err != nil {
 		r.Logger.Warn("could not re-read the PR to update its description", "error", err)
@@ -230,6 +235,15 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 	out := &Outcome{PR: pr}
 	rc, cfgErr := r.RepoConfig(ctx, c, pr)
 	opts.Overrides.Apply(&rc)
+	if pr.State == vcs.StateClosed || pr.State == vcs.StateMerged {
+		if opts.Auto {
+			// A pipeline can run for an MR that was closed or merged in the
+			// meantime; nobody reads a review of it.
+			out.SkipReason = "pull request is " + pr.State
+			return out, nil
+		}
+		r.Logger.Warn("reviewing a pull request that is not open", "state", pr.State)
+	}
 	if opts.Auto {
 		if reason := rc.AutoReviewSkipReason(pr.Title, pr.BaseBranch, pr.Draft); reason != "" {
 			out.SkipReason = reason
