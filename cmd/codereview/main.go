@@ -82,7 +82,7 @@ func main() {
 		os.Exit(int(ec))
 	}
 	if err != nil {
-		fmt.Fprintln(logOutput(), "error:", err)
+		_, _ = fmt.Fprintln(logOutput(), "error:", err)
 		os.Exit(1)
 	}
 }
