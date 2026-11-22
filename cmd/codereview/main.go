@@ -82,9 +82,23 @@ func main() {
 		os.Exit(int(ec))
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		_, _ = fmt.Fprintln(logOutput(), "error:", err)
 		os.Exit(1)
 	}
+}
+
+// logOutput is where logs and the final error go: stderr, or stdout when
+// CODEREVIEW_RESULT_MARKER is set. That marker means the caller reads both
+// streams merged (the console reads Kubernetes pod logs). With two streams,
+// the container runtime records them separately and splits a long result
+// line into partial records, so a log line written meanwhile can end up
+// inside the result. One stream keeps logs and result in order: writes to
+// one *os.File don't interleave.
+func logOutput() *os.File {
+	if os.Getenv("CODEREVIEW_RESULT_MARKER") != "" {
+		return os.Stdout
+	}
+	return os.Stderr
 }
 
 type exitCode int
@@ -111,9 +125,9 @@ func (c *common) setup() (*config.Config, *slog.Logger, error) {
 	}
 	var h slog.Handler
 	if c.json {
-		h = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+		h = slog.NewJSONHandler(logOutput(), &slog.HandlerOptions{Level: level})
 	} else {
-		h = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+		h = slog.NewTextHandler(logOutput(), &slog.HandlerOptions{Level: level})
 	}
 	logger := slog.New(h)
 	slog.SetDefault(logger)
