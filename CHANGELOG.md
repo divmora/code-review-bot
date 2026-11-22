@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/divmora/code-review-bot/compare/v0.4.0...v0.4.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* write logs to stdout when CODEREVIEW_RESULT_MARKER is set ([#7](https://github.com/divmora/code-review-bot/issues/7)) ([b10ed4d](https://github.com/divmora/code-review-bot/commit/b10ed4d36a46604b3fd2f19f55b5239b8e17d0fb))
+
 ## [0.4.0](https://github.com/divmora/code-review-bot/compare/v0.3.0...v0.4.0) (2026-11-19)
 
 
