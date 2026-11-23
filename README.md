@@ -200,9 +200,9 @@ With `--post --approve` the bot approves the PR/MR when the review passes its ru
 |---|---|---|
 | `--approve-block` | `major` | A finding at or above this severity blocks approval: `critical`, `major`, `minor`, `nitpick`, or `none` to approve whatever the review found. New findings, ones beyond `max_comments` and ones still present from an earlier review all count; questions never do. |
 | `--approve-min-score` | `0` | Also need every score at least this high (1 to 100); `0` ignores the scores. |
-| `--approve-withdraw` | off | When a later review doesn't pass, withdraw the bot's earlier approval. Off leaves it, and the code host's own rules (for example "reset approvals on push") decide. |
+| `--approve-withdraw` | on | When a later review doesn't pass, withdraw the bot's earlier approval. `--approve-withdraw=false` leaves it, and the code host's own rules (for example "reset approvals on push") decide. |
 
-A review that was partial (a batch failed), too large or reviewed nothing new leaves the approval as it is, unless it found a blocking finding anyway. The JSON result says what happened in `approval`: `approved`, `already_approved`, `withdrawn`, `not_approved`, `unchanged` or `failed` (the code host refused; the review is still posted), with `approval_reason`.
+A review that can't decide (part of it failed, the change is too large, or nothing was reviewed) of a **new commit** withdraws the bot's earlier approval too, so an approval never carries over to code that wasn't fully reviewed; with `--approve-withdraw=false` it is left as it is. A re-review of the same commit that can't decide leaves an approval of that commit in place. A blocking finding withdraws it either way. The JSON result says what happened in `approval`: `approved`, `already_approved`, `withdrawn`, `not_approved`, `unchanged` or `failed` (the code host refused; the review is still posted), with `approval_reason`.
 
 On each code host:
 - **GitLab:** approves as the token's user and unapproves the same way. The user must be allowed to approve (and can't approve a merge request it authored).
