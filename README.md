@@ -162,7 +162,7 @@ The CLI is designed to be driven by schedulers such as Divmora Code Review Conso
 | Checking input | `codereview config validate [--format json]`: rejects unknown keys, unknown providers, unresolvable models and invalid `CODEREVIEW_OVERRIDES`, without calling a model. Exit `1` when invalid |
 | Secrets | environment only: provider keys, `GITHUB_TOKEN`, `GITLAB_TOKEN` |
 | Per-repo admin settings | `CODEREVIEW_OVERRIDES` JSON: `profile`, `max_comments`, `min_severity`, `model`, `auto_review`, `drafts`, `instructions`, `learnings` |
-| Output | `--format json`: the full result (findings, summary, usage), plus `posted`, `rejected` and `pr_url`; `{"skipped": true, "skip_reason": ...}` when skipped |
+| Output | `--format json`: the full result (findings, summary, usage), plus `posted`, `rejected` and `pr_url`, and with `--approve` also `approval` and `approval_reason`; `{"skipped": true, "skip_reason": ...}` when skipped |
 | Logs | stderr |
 | Exit code | `0` success, `1` error, `3` a finding met `--fail-on` |
 
@@ -174,6 +174,23 @@ With `--post --score-labels` the scores are also set as labels on the PR/MR, rep
 - GitLab: scoped labels, `Quality Score::85`;
 - GitHub: `Quality Score: 85`.
 Colours follow the score: green 80+, orange 50–79, red below 50.
+
+## Approving pull requests
+
+With `--post --approve` the bot approves the PR/MR when the review passes its rule, as the token's user (or the GitHub App):
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--approve-block` | `major` | A finding at or above this severity blocks approval: `critical`, `major`, `minor`, `nitpick`, or `none` to approve whatever the review found. New findings, ones beyond `max_comments` and ones still present from an earlier review all count; questions never do. |
+| `--approve-min-score` | `0` | Also need every score at least this high (1 to 100); `0` ignores the scores. |
+| `--approve-withdraw` | off | When a later review doesn't pass, withdraw the bot's earlier approval. Off leaves it, and the code host's own rules (for example "reset approvals on push") decide. |
+
+A review that was partial (a batch failed), too large or reviewed nothing new leaves the approval as it is, unless it found a blocking finding anyway. The JSON result says what happened in `approval`: `approved`, `already_approved`, `withdrawn`, `not_approved`, `unchanged` or `failed` (the code host refused; the review is still posted), with `approval_reason`.
+
+On each code host:
+- **GitLab:** approves as the token's user and unapproves the same way. The user must be allowed to approve (and can't approve a merge request it authored).
+- **GitHub:** an approving review on the current commit, marked so the bot finds it again; withdrawing dismisses it. Dismissing needs write access, and branch protection can limit who may dismiss reviews.
+- **Bitbucket:** approves as the token's account.
 
 A second, skeptical **verification pass** (`review.verify`, on by default; one extra model call) checks every finding against the code and the PR description. A different model catches more of the reviewer's mistakes: set `review.verify_model` or pass `--verify-model`. The verifier classifies each finding as confirmed, false positive, **speculative** (only a problem if the code changed later, e.g. "injection" through a constant) or a question for the author. By default (`review.verify_can_drop: confident`) it removes minor findings it disputes, and major or critical ones that are speculative or that it is at least 80% sure are false; other disputed findings are posted as questions with its reason. `minor` keeps every disputed major finding as a question; `all` drops anything disputed. Every removal is listed in the summary. The verifier doesn't add findings of its own unless `review.verify_can_add: true`: its additions would go unverified, and in testing one was a false "command injection". The pass:
 - it removes false positives;
@@ -286,7 +303,7 @@ Set it in `.codereview.yaml` or with `--profile`. The profile also sets the defa
 
 | Command | Purpose |
 |---|---|
-| `review [URL]` | Review one PR/MR. Flags: `--local`, `--dir`, `--base`, `--post`, `--full`, `--auto`, `--format text\|markdown\|json\|sarif`, `--output`, `--fail-on`, `--profile`, `--max-comments`, `--min-severity`, `--commands`, `--score-labels`, `--commit-status`, `--verify-model` |
+| `review [URL]` | Review one PR/MR. Flags: `--local`, `--dir`, `--base`, `--post`, `--full`, `--auto`, `--format text\|markdown\|json\|sarif`, `--output`, `--fail-on`, `--profile`, `--max-comments`, `--min-severity`, `--commands`, `--score-labels`, `--commit-status`, `--approve`, `--approve-block`, `--approve-min-score`, `--approve-withdraw`, `--verify-model` |
 | `ask URL "question"` | Answer a question about a PR (`--post` to reply on it) |
 | `models` | List providers, profiles and the active chain |
 | `ping` | Test each model in the chain |
