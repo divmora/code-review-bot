@@ -442,7 +442,9 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 		}
 	}
 	if opts.Approval != nil {
-		out.Approval, out.ApprovalReason = r.approve(ctx, c, pr, res, *opts.Approval, bot)
+		// The last review was of this same head: an approval then was for it.
+		sameHead := state != nil && state.ReviewedSHA != "" && state.ReviewedSHA == pr.HeadSHA
+		out.Approval, out.ApprovalReason = r.approve(ctx, c, pr, res, *opts.Approval, bot, sameHead)
 	}
 	return out, nil
 }

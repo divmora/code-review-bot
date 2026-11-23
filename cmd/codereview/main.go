@@ -157,7 +157,7 @@ func cmdReview(ctx context.Context, args []string) error {
 	approve := fs.Bool("approve", false, "with --post: approve the PR/MR when the review passes (see --approve-block, --approve-min-score)")
 	approveBlock := fs.String("approve-block", "major", "with --approve: a finding at or above this severity blocks approval: critical, major, minor, nitpick, or none (approve whatever the review found)")
 	approveMinScore := fs.Int("approve-min-score", 0, "with --approve: also need every score (1-100) at least this high; 0 ignores the scores")
-	approveWithdraw := fs.Bool("approve-withdraw", false, "with --approve: withdraw the bot's earlier approval when a review doesn't pass")
+	approveWithdraw := fs.Bool("approve-withdraw", true, "with --approve: withdraw the bot's earlier approval when a review doesn't pass, or can't judge a new commit (too large, partly failed); --approve-withdraw=false leaves it")
 	verifyModel := fs.String("verify-model", "", "model for the verification pass (profile or provider:model); default review.verify_model or the review model")
 	fs.Usage = func() {
 		_, _ = fmt.Fprintf(fs.Output(), "Usage: codereview review [PR_URL] [flags]\n\nWithout PR_URL, the PR is detected from GitHub Actions, GitLab CI or Bitbucket Pipelines, or use --local.\n\n")

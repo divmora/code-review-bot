@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/divmora/code-review-bot/internal/review"
@@ -84,30 +85,51 @@ func TestRunnerApprove(t *testing.T) {
 	rule := Approval{Block: review.Major, Withdraw: true}
 	host := &stubApprover{}
 
-	if got, _ := r.approve(ctx, host, pr, clean, rule, "codereview"); got != ApprovalApproved || !host.approved || host.messages[0] != "Approved by @codereview: no findings at major or above." {
+	if got, _ := r.approve(ctx, host, pr, clean, rule, "codereview", false); got != ApprovalApproved || !host.approved || host.messages[0] != "Approved by @codereview: no findings at major or above." {
 		t.Fatalf("approve: %s %+v", got, host)
 	}
-	if got, _ := r.approve(ctx, host, pr, clean, rule, "codereview"); got != ApprovalAlreadyApproved {
+	if got, _ := r.approve(ctx, host, pr, clean, rule, "codereview", false); got != ApprovalAlreadyApproved {
 		t.Errorf("already approved: %s", got)
 	}
-	if got, _ := r.approve(ctx, host, pr, partial, rule, "codereview"); got != ApprovalUnchanged || !host.approved {
-		t.Errorf("a partial review leaves the approval: %s", got)
+	if got, _ := r.approve(ctx, host, pr, partial, rule, "codereview", true); got != ApprovalUnchanged || !host.approved {
+		t.Errorf("a partial re-review of the approved head leaves the approval: %s", got)
 	}
-	if got, reason := r.approve(ctx, host, pr, blocked, rule, "codereview"); got != ApprovalWithdrawn || host.approved || reason != "1 finding(s) at major or above" {
+	if got, reason := r.approve(ctx, host, pr, blocked, rule, "codereview", false); got != ApprovalWithdrawn || host.approved || reason != "1 finding(s) at major or above" {
 		t.Errorf("withdraw: %s %q", got, reason)
 	}
-	if got, _ := r.approve(ctx, host, pr, blocked, rule, "codereview"); got != ApprovalNotApproved {
+	if got, _ := r.approve(ctx, host, pr, blocked, rule, "codereview", false); got != ApprovalNotApproved {
 		t.Errorf("nothing to withdraw: %s", got)
 	}
 
 	// Withdraw off: an earlier approval stays.
 	host = &stubApprover{approved: true}
-	if got, _ := r.approve(ctx, host, pr, blocked, Approval{Block: review.Major}, "codereview"); got != ApprovalNotApproved || !host.approved {
+	if got, _ := r.approve(ctx, host, pr, blocked, Approval{Block: review.Major}, "codereview", false); got != ApprovalNotApproved || !host.approved {
 		t.Errorf("withdraw off: %s %+v", got, host)
 	}
+	// Issue #22: after an approval, a new head the review can't judge (too
+	// large, a batch failed) loses it, so it can't carry unreviewed code.
+	tooLarge := &review.Result{TooLarge: true}
+	host = &stubApprover{approved: true}
+	if got, reason := r.approve(ctx, host, pr, tooLarge, rule, "codereview", false); got != ApprovalWithdrawn || host.approved ||
+		!strings.Contains(reason, "wasn't fully reviewed") || !strings.Contains(host.messages[0], "withdrew its approval") {
+		t.Errorf("too large after an approval: %s %q %+v", got, reason, host)
+	}
+	host = &stubApprover{approved: true}
+	if got, _ := r.approve(ctx, host, pr, partial, rule, "codereview", false); got != ApprovalWithdrawn || host.approved {
+		t.Errorf("partly failed new head: %s %+v", got, host)
+	}
+	host = &stubApprover{}
+	if got, _ := r.approve(ctx, host, pr, partial, rule, "codereview", false); got != ApprovalUnchanged || len(host.messages) != 1 {
+		t.Errorf("nothing to withdraw on an undecided head: %s %+v", got, host)
+	}
+	host = &stubApprover{approved: true}
+	if got, _ := r.approve(ctx, host, pr, tooLarge, Approval{Block: review.Major}, "codereview", false); got != ApprovalUnchanged || !host.approved {
+		t.Errorf("withdraw off: an undecided review leaves it: %s %+v", got, host)
+	}
+
 	// A refusal from the code host is reported, not fatal.
 	host = &stubApprover{fail: errors.New("403 you can't approve your own merge request")}
-	if got, reason := r.approve(ctx, host, pr, clean, rule, "codereview"); got != ApprovalFailed || reason == "" {
+	if got, reason := r.approve(ctx, host, pr, clean, rule, "codereview", false); got != ApprovalFailed || reason == "" {
 		t.Errorf("refused: %s %q", got, reason)
 	}
 }

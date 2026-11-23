@@ -18,7 +18,9 @@ type Approval struct {
 	// MinScore, when above 0, also needs every score at least this high.
 	MinScore int
 	// Withdraw removes the bot's earlier approval when a review doesn't
-	// pass. Without it, an earlier approval is left as is.
+	// pass, and when it can't decide (too large, part of it failed) about
+	// a head it hadn't reviewed before: an approval must not outlive the
+	// code it was given for. Without it, an earlier approval is left as is.
 	Withdraw bool
 }
 
@@ -26,7 +28,7 @@ type Approval struct {
 const (
 	ApprovalApproved        = "approved"         // approved now
 	ApprovalAlreadyApproved = "already_approved" // passes; the bot had approved this head
-	ApprovalWithdrawn       = "withdrawn"        // doesn't pass; the bot's approval was removed
+	ApprovalWithdrawn       = "withdrawn"        // doesn't pass (or a new head can't be judged); the bot's approval was removed
 	ApprovalNotApproved     = "not_approved"     // doesn't pass; no approval to remove (or Withdraw is off)
 	ApprovalUnchanged       = "unchanged"        // not enough to decide (partial, too large, nothing reviewed)
 	ApprovalFailed          = "failed"           // the code host refused (see the logs)
@@ -85,10 +87,13 @@ func (a Approval) Decide(res *review.Result) (verdict, reason string) {
 }
 
 // approve applies the rule on the code host. Failures are logged and
-// reported, not fatal: the review is already posted.
-func (r *Runner) approve(ctx context.Context, c vcs.Client, pr *vcs.PR, res *review.Result, a Approval, bot string) (outcome, reason string) {
+// reported, not fatal: the review is already posted. sameHead says the
+// previous review was of this same head (so an approval then was for it).
+func (r *Runner) approve(ctx context.Context, c vcs.Client, pr *vcs.PR, res *review.Result, a Approval, bot string, sameHead bool) (outcome, reason string) {
 	verdict, reason := a.Decide(res)
-	if verdict == verdictUnknown {
+	if verdict == verdictUnknown && (!a.Withdraw || sameHead) {
+		// Not enough to decide. An approval of this same head (from a
+		// complete review of it) stays; so does any, without Withdraw.
 		r.Logger.Info("approval unchanged", "reason", reason)
 		return ApprovalUnchanged, reason
 	}
@@ -111,6 +116,10 @@ func (r *Runner) approve(ctx context.Context, c vcs.Client, pr *vcs.PR, res *rev
 	if !a.Withdraw {
 		return ApprovalNotApproved, reason
 	}
+	if verdict == verdictUnknown {
+		// A new head the review couldn't judge: no approval carries over to it.
+		reason = "this commit wasn't fully reviewed (" + reason + ")"
+	}
 	changed, err := ap.Unapprove(ctx, pr, fmt.Sprintf("@%s withdrew its approval: %s.", bot, reason))
 	switch {
 	case err != nil:
@@ -119,6 +128,8 @@ func (r *Runner) approve(ctx context.Context, c vcs.Client, pr *vcs.PR, res *rev
 	case changed:
 		r.Logger.Info("approval withdrawn", "reason", reason)
 		return ApprovalWithdrawn, reason
+	case verdict == verdictUnknown:
+		return ApprovalUnchanged, reason // there was no approval to remove
 	}
 	return ApprovalNotApproved, reason
 }
