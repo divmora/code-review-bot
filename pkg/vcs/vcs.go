@@ -181,6 +181,11 @@ type ScoreLabel struct {
 
 // GitLabScoreLabel and GitHubScoreLabel name the labels. GitLab's "::" makes
 // them scoped labels (one value per key).
+// sameColor compares hex colours, ignoring case and a leading #.
+func sameColor(a, b string) bool {
+	return strings.EqualFold(strings.TrimPrefix(a, "#"), strings.TrimPrefix(b, "#"))
+}
+
 func GitLabScoreLabel(name string, v int) string { return fmt.Sprintf("%s Score::%d", name, v) }
 func GitHubScoreLabel(name string, v int) string { return fmt.Sprintf("%s Score: %d", name, v) }
 

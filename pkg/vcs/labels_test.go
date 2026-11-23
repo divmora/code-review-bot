@@ -17,11 +17,17 @@ func TestGitLabScoreLabels(t *testing.T) {
 	var mu sync.Mutex
 	var created []map[string]string
 	var put map[string]string
+	var recolored []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 		body, _ := io.ReadAll(r.Body)
 		switch {
+		case r.Method == "GET" && r.URL.EscapedPath() == "/api/v4/projects/g%2Fp/labels/Security%20Score::100":
+			_, _ = io.WriteString(w, `{"name":"Security Score::100","color":"#6699cc","is_project_label":true}`) // made earlier, not green
+		case r.Method == "PUT" && strings.Contains(r.URL.Path, "/labels/"):
+			recolored = append(recolored, r.URL.Path+" "+string(body))
+			_, _ = io.WriteString(w, `{}`)
 		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/merge_requests/7"):
 			_, _ = io.WriteString(w, `{"labels":["bug","Quality Score::60","Security Score::100","Maintainability Score::90"]}`)
 		case r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/labels"):
@@ -55,17 +61,30 @@ func TestGitLabScoreLabels(t *testing.T) {
 	if len(created) != 3 || created[2]["color"] != "#fb8c00" {
 		t.Errorf("created = %v", created)
 	}
+	if len(recolored) != 1 || !strings.Contains(recolored[0], "Security Score::100") || !strings.Contains(recolored[0], `"#2da44e"`) {
+		t.Errorf("an existing label in another colour gets the band colour: %v", recolored)
+	}
 }
 
 func TestGitHubScoreLabels(t *testing.T) {
 	var mu sync.Mutex
 	var deleted []string
 	var added []string
+	var patched []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 		body, _ := io.ReadAll(r.Body)
 		switch {
+		case r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/repos/o/r/labels/"):
+			color := "2DA44E" // already green (case aside)
+			if strings.HasSuffix(r.URL.Path, "Maintainability Score: 70") {
+				color = "ededed"
+			}
+			_, _ = io.WriteString(w, `{"color":"`+color+`"}`)
+		case r.Method == "PATCH" && strings.HasPrefix(r.URL.Path, "/repos/o/r/labels/"):
+			patched = append(patched, r.URL.Path+" "+string(body))
+			_, _ = io.WriteString(w, `{}`)
 		case r.Method == "GET" && r.URL.Path == "/repos/o/r/issues/7/labels":
 			_, _ = io.WriteString(w, `[{"name":"bug"},{"name":"Quality Score: 60"},{"name":"Security Score: 100"}]`)
 		case r.Method == "DELETE":
@@ -92,6 +111,9 @@ func TestGitHubScoreLabels(t *testing.T) {
 	}
 	if strings.Join(added, "|") != "Quality Score: 85|Security Score: 100|Maintainability Score: 70" {
 		t.Errorf("added = %v", added)
+	}
+	if len(patched) != 1 || !strings.Contains(patched[0], "Maintainability Score: 70") || !strings.Contains(patched[0], `"fb8c00"`) {
+		t.Errorf("only the label in another colour is recoloured: %v", patched)
 	}
 }
 
