@@ -339,8 +339,18 @@ func (g *GitHubClient) SetScoreLabels(ctx context.Context, pr *PR, scores []Scor
 	for _, sc := range scores {
 		name := GitHubScoreLabel(sc.Name, sc.Value)
 		add = append(add, name)
-		if _, err := g.r.do(ctx, "POST", base+"/labels", map[string]string{"name": name, "color": sc.Color}, nil); err != nil && statusOf(err) != http.StatusUnprocessableEntity {
-			return fmt.Errorf("create label %s: %w", name, err)
+		if _, err := g.r.do(ctx, "POST", base+"/labels", map[string]string{"name": name, "color": sc.Color}, nil); err != nil {
+			if statusOf(err) != http.StatusUnprocessableEntity {
+				return fmt.Errorf("create label %s: %w", name, err)
+			}
+			// It exists: give it the band colour (best effort).
+			var l struct {
+				Color string `json:"color"`
+			}
+			lp := base + "/labels/" + url.PathEscape(name)
+			if _, err := g.r.do(ctx, "GET", lp, nil, &l); err == nil && !sameColor(l.Color, sc.Color) {
+				_, _ = g.r.do(ctx, "PATCH", lp, map[string]string{"color": sc.Color}, nil)
+			}
 		}
 	}
 	_, err := g.r.do(ctx, "POST", fmt.Sprintf("%s/issues/%d/labels", base, pr.Number), map[string][]string{"labels": add}, nil)

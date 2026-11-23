@@ -314,12 +314,15 @@ func (g *GitLabClient) SetScoreLabels(ctx context.Context, pr *PR, scores []Scor
 	for _, sc := range scores {
 		name := GitLabScoreLabel(sc.Name, sc.Value)
 		add = append(add, name)
-		// Create once with the band colour; an existing label is fine.
+		// Create it with the band colour; an existing one gets that colour
+		// too, so a label made earlier (by hand, another tool) isn't left
+		// in some other colour.
 		_, err := g.r.do(ctx, "POST", fmt.Sprintf("/projects/%s/labels", proj(pr.Repo)), map[string]string{"name": name, "color": "#" + sc.Color}, nil)
 		if err != nil {
 			if s := statusOf(err); s != http.StatusConflict && s != http.StatusBadRequest {
 				return fmt.Errorf("create label %s: %w", name, err)
 			}
+			g.recolorLabel(ctx, pr.Repo, name, sc.Color)
 		}
 	}
 	body := map[string]string{"add_labels": strings.Join(add, ",")}
@@ -328,6 +331,21 @@ func (g *GitLabClient) SetScoreLabels(ctx context.Context, pr *PR, scores []Scor
 	}
 	_, err := g.r.do(ctx, "PUT", g.mrPath(pr.Ref), body, nil)
 	return err
+}
+
+// recolorLabel gives an existing project label the colour (hex, no #).
+// Best effort: a group label can't be changed from the project, and a
+// failure leaves the label as it was.
+func (g *GitLabClient) recolorLabel(ctx context.Context, repo, name, color string) {
+	path := fmt.Sprintf("/projects/%s/labels/%s", proj(repo), url.PathEscape(name))
+	var l struct {
+		Color          string `json:"color"`
+		IsProjectLabel *bool  `json:"is_project_label"`
+	}
+	if _, err := g.r.do(ctx, "GET", path, nil, &l); err != nil || sameColor(l.Color, color) || (l.IsProjectLabel != nil && !*l.IsProjectLabel) {
+		return
+	}
+	_, _ = g.r.do(ctx, "PUT", path, map[string]string{"color": "#" + color}, nil)
 }
 
 func (g *GitLabClient) UpdatePR(ctx context.Context, pr *PR, title, description *string) error {
