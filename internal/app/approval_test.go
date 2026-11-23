@@ -12,6 +12,19 @@ import (
 	"github.com/divmora/code-review-bot/pkg/vcs"
 )
 
+func TestUnreviewedReason(t *testing.T) {
+	var skipped []review.SkippedFile
+	for _, p := range []string{"a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go"} {
+		skipped = append(skipped, review.SkippedFile{Path: p, Reason: "deleted"})
+	}
+	skipped = append(skipped, review.SkippedFile{Path: "keep.lock", Reason: review.SkipPathFilters})
+	_, reason := Approval{Block: review.Major}.Decide(&review.Result{Reviewed: []string{"x.go"}, Skipped: skipped})
+	if !strings.HasPrefix(reason, "7 changed file(s) weren't reviewed: a.go (deleted), b.go (deleted)") || !strings.Contains(reason, "and 2 more") ||
+		strings.Contains(reason, "keep.lock") || !strings.Contains(reason, "path_filters") {
+		t.Errorf("reason: %q", reason)
+	}
+}
+
 func TestApprovalDecide(t *testing.T) {
 	f := func(sev review.Severity, kind string) review.Finding {
 		return review.Finding{Severity: sev, Kind: kind}
@@ -43,6 +56,15 @@ func TestApprovalDecide(t *testing.T) {
 		{"partial, but a blocker found", Approval{Block: review.Major}, reviewed(review.Result{Errors: []string{"x"}, Findings: []review.Finding{f(review.Major, "")}}), verdictBlock},
 		{"too large", Approval{Block: review.Major}, reviewed(review.Result{TooLarge: true}), verdictUnknown},
 		{"nothing reviewed", Approval{Block: review.Major}, &review.Result{}, verdictUnknown},
+		// Issue #20: a change can hide in a file the review skips.
+		{"a deleted file wasn't reviewed", Approval{Block: review.Major}, reviewed(review.Result{Skipped: []review.SkippedFile{{Path: "auth/check.go", Reason: "deleted"}}}), verdictUnknown},
+		{"deletion-only file", Approval{}, reviewed(review.Result{Skipped: []review.SkippedFile{{Path: "a.go", Reason: "only deletions"}}}), verdictUnknown},
+		{"generated header", Approval{Block: review.Major}, reviewed(review.Result{Skipped: []review.SkippedFile{{Path: "a.go", Reason: "generated file"}}}), verdictUnknown},
+		{"too large for the API", Approval{Block: review.Major}, reviewed(review.Result{Skipped: []review.SkippedFile{{Path: "a.go", Reason: "diff too large for the code host API"}}}), verdictUnknown},
+		{"ignored by default", Approval{Block: review.Major}, reviewed(review.Result{Skipped: []review.SkippedFile{{Path: "x_generated.go", Reason: "ignored by default (lockfile, generated, vendored or asset)"}}}), verdictUnknown},
+		{"excluded by the base branch's path_filters", Approval{Block: review.Major}, reviewed(review.Result{Skipped: []review.SkippedFile{{Path: "yarn.lock", Reason: review.SkipPathFilters}}}), verdictPass},
+		{"a pure rename", Approval{Block: review.Major}, reviewed(review.Result{Skipped: []review.SkippedFile{{Path: "b.go", Reason: review.SkipNoTextChanges}}}), verdictPass},
+		{"a blocker beats unreviewed files", Approval{Block: review.Major}, reviewed(review.Result{Findings: []review.Finding{f(review.Major, "")}, Skipped: []review.SkippedFile{{Path: "a.go", Reason: "deleted"}}}), verdictBlock},
 	} {
 		if got, reason := c.a.Decide(c.res); got != c.want || reason == "" {
 			t.Errorf("%s: %s (%q), want %s", c.name, got, reason, c.want)

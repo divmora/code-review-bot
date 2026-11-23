@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/divmora/code-review-bot/internal/review"
 	"github.com/divmora/code-review-bot/pkg/vcs"
@@ -66,6 +67,13 @@ func (a Approval) Decide(res *review.Result) (verdict, reason string) {
 	if len(res.Errors) > 0 { // part of the change wasn't reviewed
 		return verdictUnknown, "part of the review failed"
 	}
+	// Files the review skipped that the base branch's path_filters didn't
+	// exclude (deleted, generated, too large, ignored by default...) can
+	// hide a change: no approval for code nobody looked at.
+	if n, names := unreviewed(res.Skipped); n > 0 {
+		return verdictUnknown, fmt.Sprintf("%d changed file(s) weren't reviewed: %s; exclude files you accept unreviewed in the base branch's path_filters",
+			n, strings.Join(names, ", "))
+	}
 	if a.MinScore > 0 {
 		if res.Scores == nil {
 			return verdictUnknown, "the review gave no scores"
@@ -84,6 +92,23 @@ func (a Approval) Decide(res *review.Result) (verdict, reason string) {
 		reason += fmt.Sprintf(", every score at least %d", a.MinScore)
 	}
 	return verdictPass, reason
+}
+
+// unreviewed counts the skipped files that keep the bot from approving,
+// and names them with why (at most 5, then how many more).
+func unreviewed(skipped []review.SkippedFile) (n int, out []string) {
+	for _, s := range skipped {
+		if !s.Unreviewed() {
+			continue
+		}
+		if n++; n <= 5 {
+			out = append(out, s.Path+" ("+s.Reason+")")
+		}
+	}
+	if n > 5 {
+		out = append(out, fmt.Sprintf("and %d more", n-5))
+	}
+	return n, out
 }
 
 // approve applies the rule on the code host. Failures are logged and
