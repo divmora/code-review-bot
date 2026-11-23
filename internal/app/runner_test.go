@@ -113,7 +113,7 @@ func (g *fakeGitHub) handler(t *testing.T) http.Handler {
 		case r.Method == "GET" && p == "/repos/o/r/issues/7/comments":
 			if g.summary != "" {
 				b, _ := json.Marshal(g.summary)
-				_, _ = fmt.Fprintf(w, `[{"id":1,"body":"hello"},{"id":%d,"body":%s}]`, g.summaryID, b)
+				_, _ = fmt.Fprintf(w, `[{"id":1,"body":"hello","user":{"login":"dev","type":"User"}},{"id":%d,"body":%s,"user":{"login":"review-bot","type":"User"}}]`, g.summaryID, b)
 			} else {
 				_, _ = io.WriteString(w, `[]`)
 			}
@@ -121,7 +121,7 @@ func (g *fakeGitHub) handler(t *testing.T) http.Handler {
 			var items []string
 			for _, b := range g.inline {
 				j, _ := json.Marshal(b)
-				items = append(items, `{"id":5,"body":`+string(j)+`}`)
+				items = append(items, `{"id":5,"body":`+string(j)+`,"user":{"login":"review-bot","type":"User"}}`)
 			}
 			_, _ = io.WriteString(w, "["+strings.Join(items, ",")+"]")
 		case r.Method == "GET" && strings.HasPrefix(p, "/repos/o/r/compare/"):

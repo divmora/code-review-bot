@@ -25,7 +25,8 @@ const Bitbucket = "bitbucket"
 // Bitbucket-friendly Markdown on the way out and back on the way in. The
 // rest of the bot keeps working with one marker format.
 type BitbucketClient struct {
-	r *rest
+	r    *rest
+	self selfCache // the token account's UUID
 }
 
 // BitbucketAuth holds one of the two supported credentials:
@@ -209,6 +210,10 @@ func (b *BitbucketClient) ChangedPaths(ctx context.Context, pr *PR, from, to str
 type bbComment struct {
 	ID      int64 `json:"id"`
 	Deleted bool  `json:"deleted"`
+	User    struct {
+		UUID string `json:"uuid"`
+		Type string `json:"type"`
+	} `json:"user"`
 	Content struct {
 		Raw string `json:"raw"`
 	} `json:"content"`
@@ -219,16 +224,48 @@ type bbComment struct {
 	} `json:"inline"`
 }
 
+// selfUUID is the token account's UUID: only its comments are the bot's.
+// It is "" for an access token, which has no account to read: then only
+// bot accounts (app_user) are trusted, which participants are not.
+func (b *BitbucketClient) selfUUID(ctx context.Context) (string, error) {
+	return b.self.get(ctx, func(ctx context.Context) (string, error) {
+		var v struct {
+			UUID string `json:"uuid"`
+		}
+		_, err := b.r.do(ctx, "GET", "/user", nil, &v)
+		if s := statusOf(err); s == http.StatusForbidden || s == http.StatusUnauthorized || s == http.StatusNotFound {
+			return "", nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("read the token's account: %w", err)
+		}
+		return v.UUID, nil
+	})
+}
+
+// bitbucketTrusted: a comment by the token's account, or, for an access
+// token (self ""), by a bot account.
+func bitbucketTrusted(self, uuid, typ string) bool {
+	if self != "" {
+		return uuid == self
+	}
+	return typ == "app_user"
+}
+
 func (b *BitbucketClient) BotState(ctx context.Context, pr *PR) (*BotState, error) {
+	self, err := b.selfUUID(ctx)
+	if err != nil {
+		return nil, err
+	}
 	st := &BotState{Fingerprints: map[string]bool{}}
-	err := b.pages(ctx, b.prPath(pr.Ref)+"/comments?pagelen=100", func(values json.RawMessage) error {
+	err = b.pages(ctx, b.prPath(pr.Ref)+"/comments?pagelen=100", func(values json.RawMessage) error {
 		var page []bbComment
 		if err := json.Unmarshal(values, &page); err != nil {
 			return err
 		}
 		for _, c := range page {
-			if c.Deleted {
-				continue
+			if c.Deleted || !bitbucketTrusted(self, c.User.UUID, c.User.Type) {
+				continue // only the bot's own comments (issue #21)
 			}
 			body := fromBitbucketMarkdown(c.Content.Raw)
 			if c.Inline == nil && isSummary(body) {

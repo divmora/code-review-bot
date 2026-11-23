@@ -16,7 +16,8 @@ import (
 
 // GitLabClient talks to the GitLab REST API v4 (gitlab.com or self-managed).
 type GitLabClient struct {
-	r *rest
+	r    *rest
+	self selfCache // the token user's ID
 }
 
 // NewGitLab creates a client for baseURL (e.g. https://gitlab.example.com).
@@ -206,7 +207,10 @@ func (g *GitLabClient) ChangedPaths(ctx context.Context, pr *PR, from, to string
 }
 
 type glNote struct {
-	ID       int64  `json:"id"`
+	ID     int64 `json:"id"`
+	Author struct {
+		ID int64 `json:"id"`
+	} `json:"author"`
 	Body     string `json:"body"`
 	System   bool   `json:"system"`
 	Resolved bool   `json:"resolved"`
@@ -216,9 +220,26 @@ type glNote struct {
 	} `json:"position"`
 }
 
+// selfID is the token user's ID: only its notes are the bot's.
+func (g *GitLabClient) selfID(ctx context.Context) (string, error) {
+	return g.self.get(ctx, func(ctx context.Context) (string, error) {
+		var v struct {
+			ID int64 `json:"id"`
+		}
+		if _, err := g.r.do(ctx, "GET", "/user", nil, &v); err != nil {
+			return "", fmt.Errorf("read the token's user: %w", err)
+		}
+		return strconv.FormatInt(v.ID, 10), nil
+	})
+}
+
 func (g *GitLabClient) BotState(ctx context.Context, pr *PR) (*BotState, error) {
+	self, err := g.selfID(ctx)
+	if err != nil {
+		return nil, err
+	}
 	st := &BotState{Fingerprints: map[string]bool{}}
-	err := g.pages(ctx, g.mrPath(pr.Ref)+"/discussions", func(raw []byte) error {
+	err = g.pages(ctx, g.mrPath(pr.Ref)+"/discussions", func(raw []byte) error {
 		var page []struct {
 			Notes []glNote `json:"notes"`
 		}
@@ -227,8 +248,8 @@ func (g *GitLabClient) BotState(ctx context.Context, pr *PR) (*BotState, error) 
 		}
 		for _, d := range page {
 			for _, n := range d.Notes {
-				if n.System {
-					continue
+				if n.System || strconv.FormatInt(n.Author.ID, 10) != self {
+					continue // only the bot's own notes (issue #21)
 				}
 				if isSummary(n.Body) {
 					parseSummary(strconv.FormatInt(n.ID, 10), n.Body, st)

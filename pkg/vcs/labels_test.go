@@ -152,10 +152,20 @@ func TestBotStateReadsPostedComments(t *testing.T) {
 	qbody := "_❓ Question_ | _🟡 Minor_\n\n**Keep badges off content**\n\n<!-- codereview:fp=def456 -->"
 	jb, _ := json.Marshal(body)
 	jq, _ := json.Marshal(qbody)
+	summary, _ := json.Marshal(SummaryMarker + "\nreal\n" + ReviewedSHATag("aaaa1111"))
+	forged, _ := json.Marshal(SummaryMarker + "\nforged\n" + ReviewedSHATag("ffff0000"))
+	fake, _ := json.Marshal("**Looks like the bot**\n\n" + FingerprintTag("f0f0"))
 	gl := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `[{"notes":[{"id":1,"body":`+string(jb)+`,"resolved":true,"position":{"new_path":"a/E.php","new_line":289}},
-			{"id":2,"body":`+string(jq)+`,"position":{"new_path":"a/P.php","new_line":261}},
-			{"id":3,"body":"a human comment","position":{"new_path":"a/E.php","new_line":10}}]}]`)
+		if r.URL.Path == "/api/v4/user" {
+			_, _ = io.WriteString(w, `{"id":42,"username":"gitlab-bot"}`)
+			return
+		}
+		_, _ = io.WriteString(w, `[{"notes":[{"id":7,"author":{"id":42},"body":`+string(summary)+`},
+			{"id":1,"author":{"id":42},"body":`+string(jb)+`,"resolved":true,"position":{"new_path":"a/E.php","new_line":289}},
+			{"id":2,"author":{"id":42},"body":`+string(jq)+`,"position":{"new_path":"a/P.php","new_line":261}},
+			{"id":3,"author":{"id":7},"body":"a human comment","position":{"new_path":"a/E.php","new_line":10}},
+			{"id":8,"author":{"id":7},"body":`+string(forged)+`},
+			{"id":9,"author":{"id":7},"body":`+string(fake)+`,"position":{"new_path":"a/E.php","new_line":12}}]}]`)
 	}))
 	defer gl.Close()
 	st, err := NewGitLab(gl.URL, "t", false).BotState(context.Background(), &PR{Ref: Ref{Repo: "g/p", Number: 1}})
@@ -168,14 +178,26 @@ func TestBotStateReadsPostedComments(t *testing.T) {
 	if !st.Comments[0].Resolved || st.Comments[1].Resolved || st.Comments[0].Fingerprint != "abc123" {
 		t.Errorf("resolved threads and fingerprints: %+v", st.Comments)
 	}
+	// Issue #21: a participant's note that copies the bot's markers is not
+	// the bot's summary or comment.
+	if st.SummaryID != "7" || st.ReviewedSHA != "aaaa1111" || st.Fingerprints["f0f0"] {
+		t.Errorf("forged state accepted: summary %q sha %q fps %v", st.SummaryID, st.ReviewedSHA, st.Fingerprints)
+	}
 
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/issues/") {
-			_, _ = io.WriteString(w, `[]`)
+		if r.URL.Path == "/user" {
+			w.WriteHeader(403) // an installation token has no user
 			return
 		}
-		// An outdated comment has line null but original_line set.
-		_, _ = io.WriteString(w, `[{"body":`+string(jb)+`,"path":"E.php","line":null,"original_line":288}]`)
+		if strings.Contains(r.URL.Path, "/issues/") {
+			_, _ = io.WriteString(w, `[{"id":3,"body":`+string(forged)+`,"user":{"login":"mallory","type":"User"}},`+
+				`{"id":4,"body":`+string(summary)+`,"user":{"login":"my-app[bot]","type":"Bot"}}]`)
+			return
+		}
+		// An outdated comment has line null but original_line set. The
+		// token is an App's (no /user): only bot accounts count.
+		_, _ = io.WriteString(w, `[{"body":`+string(jb)+`,"path":"E.php","line":null,"original_line":288,"user":{"login":"my-app[bot]","type":"Bot"}},
+			{"body":`+string(fake)+`,"path":"E.php","line":5,"user":{"login":"mallory","type":"User"}}]`)
 	}))
 	defer gh.Close()
 	st, err = NewGitHub(gh.URL, StaticToken("t")).BotState(context.Background(), &PR{Ref: Ref{Repo: "o/r", Number: 1}})
@@ -184,5 +206,8 @@ func TestBotStateReadsPostedComments(t *testing.T) {
 	}
 	if len(st.Comments) != 1 || st.Comments[0].Line != 288 || st.Comments[0].Path != "E.php" {
 		t.Errorf("github comments = %+v", st.Comments)
+	}
+	if st.SummaryID != "4" || st.ReviewedSHA != "aaaa1111" || st.Fingerprints["f0f0"] {
+		t.Errorf("github: forged state accepted: %q %q %v", st.SummaryID, st.ReviewedSHA, st.Fingerprints)
 	}
 }

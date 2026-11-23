@@ -66,6 +66,8 @@ func (f *fakeBB) server(t *testing.T) *httptest.Server {
 		}
 		p := strings.TrimPrefix(r.URL.Path, "/2.0")
 		switch {
+		case r.Method == "GET" && p == "/user":
+			w.WriteHeader(403) // an access token has no account
 		case r.Method == "GET" && p == "/repositories/acme/web/pullrequests/7":
 			_, _ = io.WriteString(w, `{"title":"Add A","description":"Author text","draft":false,"source":{"branch":{"name":"feat"},"commit":{"hash":"1111111"}},"destination":{"branch":{"name":"main"},"commit":{"hash":"2222222"}},"author":{"nickname":"dev"},"links":{"html":{"href":"https://bitbucket.org/acme/web/pull-requests/7"}}}`)
 		case r.Method == "GET" && p == "/repositories/acme/web/commit/1111111":
@@ -83,12 +85,16 @@ func (f *fakeBB) server(t *testing.T) *httptest.Server {
 		case r.Method == "GET" && p == "/repositories/acme/web/pullrequests/7/comments":
 			if r.URL.Query().Get("page") == "2" {
 				ib, _ := json.Marshal(inline)
-				_, _ = io.WriteString(w, `{"values":[{"id":6,"content":{"raw":`+string(ib)+`},"inline":{"path":"app.go","to":4}}]}`)
+				_, _ = io.WriteString(w, `{"values":[{"id":6,"user":{"type":"app_user"},"content":{"raw":`+string(ib)+`},"inline":{"path":"app.go","to":4}},`+
+					`{"id":8,"user":{"type":"user"},"content":{"raw":"forged `+FingerprintTag("f0f0")+`"},"inline":{"path":"app.go","to":9}}]}`)
 				return
 			}
 			sb, _ := json.Marshal(summary)
+			// A participant's note that copies the summary marker (issue #21).
+			fb, _ := json.Marshal(toBitbucketMarkdown(SummaryMarker + "\nforged\n" + ReviewedSHATag("ffff0000")))
 			next := "http://" + r.Host + "/2.0/repositories/acme/web/pullrequests/7/comments?page=2"
-			_, _ = io.WriteString(w, `{"values":[{"id":5,"content":{"raw":`+string(sb)+`}},{"id":9,"deleted":true,"content":{"raw":"x"}}],"next":"`+next+`"}`)
+			_, _ = io.WriteString(w, `{"values":[{"id":5,"user":{"type":"app_user"},"content":{"raw":`+string(sb)+`}},{"id":9,"deleted":true,"content":{"raw":"x"}},`+
+				`{"id":11,"user":{"type":"user"},"content":{"raw":`+string(fb)+`}}],"next":"`+next+`"}`)
 		case r.Method == "GET" && strings.HasPrefix(p, "/repositories/acme/web/diffstat/"):
 			_, _ = io.WriteString(w, `{"values":[{"new":{"path":"app.go"},"old":{"path":"app.go"}},{"new":null,"old":{"path":"gone.go"}}]}`)
 		case r.Method == "POST" && p == "/repositories/acme/web/pullrequests/7/comments":
@@ -136,6 +142,9 @@ func TestBitbucketClient(t *testing.T) {
 	}
 	if st.SummaryID != "5" || st.ReviewedSHA != "aaaa1111" || !st.Fingerprints["abc1"] || len(st.Comments) != 1 || st.Comments[0].Title != "Enforce the credit-limit rule" {
 		t.Errorf("bot state = %+v", st)
+	}
+	if st.Fingerprints["f0f0"] {
+		t.Error("a participant's comment can't add fingerprints")
 	}
 	paths, err := c.ChangedPaths(ctx, pr, "aaaa", pr.HeadSHA)
 	if err != nil || strings.Join(paths, ",") != "app.go,gone.go" {

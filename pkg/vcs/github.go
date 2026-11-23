@@ -29,7 +29,8 @@ func (s StaticToken) Token(context.Context) (string, error) {
 
 // GitHubClient talks to the GitHub REST API (github.com or GHES).
 type GitHubClient struct {
-	r *rest
+	r    *rest
+	self selfCache // the token user's login; "" for an App or Actions token
 }
 
 // NewGitHub creates a client. apiURL is https://api.github.com or
@@ -185,11 +186,26 @@ func (g *GitHubClient) ChangedPaths(ctx context.Context, pr *PR, from, to string
 	return out, nil
 }
 
+// selfLogin is the token user's login, or "" when the token has no user
+// (a GitHub App installation or the Actions GITHUB_TOKEN).
+func (g *GitHubClient) selfLogin(ctx context.Context) string {
+	login, _ := g.self.get(ctx, func(ctx context.Context) (string, error) {
+		l, err := g.CurrentUser(ctx)
+		if s := statusOf(err); s == http.StatusForbidden || s == http.StatusNotFound || s == http.StatusUnauthorized {
+			return "", nil // no user: trust bot accounts only
+		}
+		return l, err
+	})
+	return login
+}
+
 func (g *GitHubClient) BotState(ctx context.Context, pr *PR) (*BotState, error) {
 	st := &BotState{Fingerprints: map[string]bool{}}
+	self := g.selfLogin(ctx)
 	type comment struct {
-		ID   int64  `json:"id"`
-		Body string `json:"body"`
+		ID   int64    `json:"id"`
+		Body string   `json:"body"`
+		User ghAuthor `json:"user"`
 	}
 	err := g.pages(ctx, fmt.Sprintf("/repos/%s/issues/%d/comments?per_page=100", repoPath(pr.Repo), pr.Number), func(raw []byte) error {
 		var page []comment
@@ -197,7 +213,7 @@ func (g *GitHubClient) BotState(ctx context.Context, pr *PR) (*BotState, error) 
 			return err
 		}
 		for _, c := range page {
-			if isSummary(c.Body) {
+			if isSummary(c.Body) && githubTrusted(self, c.User) {
 				parseSummary(fmt.Sprint(c.ID), c.Body, st)
 			}
 		}
@@ -208,15 +224,19 @@ func (g *GitHubClient) BotState(ctx context.Context, pr *PR) (*BotState, error) 
 	}
 	err = g.pages(ctx, fmt.Sprintf("/repos/%s/pulls/%d/comments?per_page=100", repoPath(pr.Repo), pr.Number), func(raw []byte) error {
 		var page []struct {
-			Body         string `json:"body"`
-			Path         string `json:"path"`
-			Line         *int   `json:"line"`
-			OriginalLine *int   `json:"original_line"`
+			Body         string   `json:"body"`
+			Path         string   `json:"path"`
+			Line         *int     `json:"line"`
+			OriginalLine *int     `json:"original_line"`
+			User         ghAuthor `json:"user"`
 		}
 		if err := jsonUnmarshal(raw, &page); err != nil {
 			return err
 		}
 		for _, c := range page {
+			if !githubTrusted(self, c.User) {
+				continue // only the bot's own comments (issue #21)
+			}
 			collectFingerprints(c.Body, st.Fingerprints)
 			line := 0
 			if c.Line != nil {
