@@ -67,6 +67,9 @@ type State struct {
 	Scores       *Scores        `json:"scores,omitempty"`
 	ScoresSHA    string         `json:"scores_sha,omitempty"`
 	OpenFindings map[string]int `json:"open_findings,omitempty"`
+	// Findings are the findings open at this review (counting towards the
+	// scores), so the next review can tell fixed ones from dismissed ones.
+	Findings []PrevFinding `json:"findings,omitempty"`
 }
 
 // summaryScoresRe reads the scores row of an older summary's table.
@@ -235,6 +238,21 @@ func SummaryMarkdown(res *Result, opts SummaryOptions) string {
 	} else if res.ScoresNote != "" {
 		b.WriteString("_No scores this time: " + escapeInline(res.ScoresNote) + "._\n\n")
 	}
+	if pf := res.Previous; pf != nil && pf.Fixed+pf.Dismissed > 0 {
+		fmt.Fprintf(&b, "Earlier findings: %d fixed, %d dismissed, %d still open.", pf.Fixed, pf.Dismissed, pf.StillOpen)
+		if pf.Dismissed > 0 {
+			b.WriteString(" Dismissed means resolved without a code change; those still count towards the scores.")
+		}
+		b.WriteString("\n")
+		for i, f := range pf.DismissedList {
+			if i == 5 {
+				fmt.Fprintf(&b, "- …and %d more\n", len(pf.DismissedList)-5)
+				break
+			}
+			fmt.Fprintf(&b, "- Dismissed: %s (%s, `%s:%d`)\n", escapeInline(truncate(f.Title, 120)), f.Severity, f.Path, f.Line)
+		}
+		b.WriteString("\n")
+	}
 	if res.Effort > 0 {
 		fmt.Fprintf(&b, "## Estimated code review effort\n\n🎯 %d (%s) | ⏱️ %s minutes\n\n", res.Effort, effortLabel[res.Effort], effortMinutes[res.Effort])
 	}
@@ -325,9 +343,9 @@ func SummaryMarkdown(res *Result, opts SummaryOptions) string {
 	if res.HeadSHA != "" {
 		b.WriteString(vcs.ReviewedSHATag(res.HeadSHA) + "\n")
 	}
-	state := State{FileSummaries: res.FileSummaries}
+	state := State{FileSummaries: res.FileSummaries, Findings: res.open}
 	if res.Scores != nil {
-		state.Scores, state.ScoresSHA, state.OpenFindings = res.Scores, res.HeadSHA, OpenFindings(res.allFindings())
+		state.Scores, state.ScoresSHA, state.OpenFindings = res.Scores, res.HeadSHA, OpenFindings(res.scoreFindings())
 	} else if c := res.carry; c != nil {
 		sc := c.Scores
 		state.Scores, state.ScoresSHA, state.OpenFindings = &sc, c.SHA, c.Open

@@ -364,6 +364,9 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 	if !opts.Full && (r.Cfg.Review.AnchorScores == nil || *r.Cfg.Review.AnchorScores) {
 		anchorTo(&in, state)
 	}
+	if !opts.Full {
+		in.PrevFindings = r.previousFindings(ctx, c, pr, state)
+	}
 
 	model, err := r.LLM(rc.Model, opts.Overrides != nil && opts.Overrides.Model != nil && *opts.Overrides.Model != "")
 	if err != nil {
@@ -515,6 +518,69 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// maxPrevFileChecks bounds the files fetched to check earlier findings.
+const maxPrevFileChecks = 40
+
+// previousFindings are the findings open at the last review, each marked
+// Changed when the code it pointed at has changed since (or its file is
+// gone): those count as fixed unless reported again (issue #15). nil for
+// summaries written before findings were kept.
+func (r *Runner) previousFindings(ctx context.Context, c vcs.Client, pr *vcs.PR, state *vcs.BotState) []review.PrevFinding {
+	if state == nil || len(state.State) == 0 {
+		return nil
+	}
+	var prev review.State
+	if json.Unmarshal(state.State, &prev) != nil || prev.Findings == nil {
+		return nil
+	}
+	out := append([]review.PrevFinding{}, prev.Findings...)
+	from := state.ReviewedSHA
+	if from == "" || from == pr.HeadSHA {
+		return out // nothing changed since
+	}
+	var changed map[string]bool // nil: unknown (a force-push dropped the old commit)
+	if paths, err := c.ChangedPaths(ctx, pr, from, pr.HeadSHA); err == nil {
+		changed = map[string]bool{}
+		for _, p := range paths {
+			changed[p] = true
+		}
+	}
+	contents := map[string][]byte{}
+	gone := map[string]bool{}
+	checked := 0
+	for i := range out {
+		p := &out[i]
+		if changed != nil && !changed[p.Path] {
+			continue // the file didn't change
+		}
+		if _, ok := contents[p.Path]; !ok && !gone[p.Path] {
+			if checked >= maxPrevFileChecks {
+				continue
+			}
+			checked++
+			b, err := c.FileContent(ctx, pr, p.Path, pr.HeadSHA)
+			switch {
+			case errors.Is(err, vcs.ErrNotFound):
+				gone[p.Path] = true
+			case err != nil:
+				r.Logger.Info("could not check an earlier finding", "path", p.Path, "error", err)
+				continue
+			default:
+				contents[p.Path] = b
+			}
+		}
+		switch {
+		case gone[p.Path]:
+			p.Changed = true
+		case p.CodeHash != "":
+			p.Changed = !review.CodeStillThere(contents[p.Path], *p)
+		default: // the code wasn't kept: the file changing is all we know
+			p.Changed = changed != nil
+		}
+	}
+	return out
 }
 
 // anchorTo gives the review the previous scores to start from: those kept

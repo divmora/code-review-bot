@@ -36,17 +36,17 @@ func TestAnchorScores(t *testing.T) {
 		{"caps still win", Scores{Quality: 82, Security: 95, Maintainability: 80}, []Finding{{Severity: Critical, Category: "security"}}, map[string]int{"security": 1}, nil,
 			Scores{Quality: 85, Security: 40, Maintainability: 85}},
 	} {
-		got, _ := anchorScores(prev, c.proposed, c.fs, c.prevOpen, c.reasons)
+		got, _ := anchorScores(prev, c.proposed, c.fs, c.prevOpen, c.reasons, nil)
 		if got != c.want {
 			t.Errorf("%s: got %+v, want %+v", c.name, got, c.want)
 		}
 	}
 
-	_, changes := anchorScores(prev, Scores{Quality: 66, Security: 95, Maintainability: 80}, []Finding{bug(Major)}, nil, map[string]string{"quality": "new major finding in auth.go"})
+	_, changes := anchorScores(prev, Scores{Quality: 66, Security: 95, Maintainability: 80}, []Finding{bug(Major)}, nil, map[string]string{"quality": "new major finding in auth.go"}, nil)
 	if len(changes) < 1 || changes[0] != (ScoreChange{Name: "Quality", From: 82, To: 66, Reason: "new major finding in auth.go"}) {
 		t.Errorf("changes: %+v", changes)
 	}
-	_, changes = anchorScores(prev, Scores{Quality: 66, Security: 95, Maintainability: 80}, []Finding{bug(Major)}, nil, nil)
+	_, changes = anchorScores(prev, Scores{Quality: 66, Security: 95, Maintainability: 80}, []Finding{bug(Major)}, nil, nil, nil)
 	if changes[0].Reason != "1 open finding(s)" {
 		t.Errorf("a reason is given when the model gave none: %+v", changes)
 	}

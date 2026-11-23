@@ -196,12 +196,19 @@ func (s *Scores) setKey(k string, v int) {
 //   - a change smaller than scoreAnchorThreshold keeps the previous value;
 //   - a score drops only with an open finding in its dimension;
 //   - a score rises only when that dimension has fewer open findings than
-//     before (or none), or the model said why.
+//     before (or none), or the model said why and no earlier finding in it
+//     is carried over unfixed.
 //
-// The floors and caps from the findings are applied last and still win.
-// prevOpen is nil when the previous counts aren't known (older summaries).
-func anchorScores(prev, proposed Scores, fs []Finding, prevOpen map[string]int, reasons map[string]string) (Scores, []ScoreChange) {
+// fs includes earlier findings carried over (not fixed), so only fixed
+// findings lower the open count. The floors and caps from the findings are
+// applied last and still win. prevOpen is nil when the previous counts
+// aren't known (older summaries); pf is nil without previous findings.
+func anchorScores(prev, proposed Scores, fs []Finding, prevOpen map[string]int, reasons map[string]string, pf *PreviousFindings) (Scores, []ScoreChange) {
 	open := OpenFindings(fs)
+	carried := map[string]int{}
+	if pf != nil {
+		carried = pf.carriedBy
+	}
 	next := proposed
 	for _, d := range scoreDimensions {
 		k := d[0]
@@ -211,7 +218,7 @@ func anchorScores(prev, proposed Scores, fs []Finding, prevOpen map[string]int, 
 			v = p
 		case v < p && open[k] == 0:
 			v = p
-		case v > p && open[k] > 0 && strings.TrimSpace(reasons[k]) == "" && (prevOpen == nil || open[k] >= prevOpen[k]):
+		case v > p && open[k] > 0 && (strings.TrimSpace(reasons[k]) == "" || carried[k] > 0) && (prevOpen == nil || open[k] >= prevOpen[k]):
 			v = p
 		}
 		next.setKey(k, v)
@@ -228,15 +235,23 @@ func anchorScores(prev, proposed Scores, fs []Finding, prevOpen map[string]int, 
 		if len(reason) > 200 {
 			reason = reason[:200]
 		}
+		if pf != nil && to > from && pf.fixedBy[k] > 0 {
+			reason = "" // say what was fixed, not the model's words
+		}
 		if reason == "" {
 			switch {
 			case to < from:
 				reason = fmt.Sprintf("%d open finding(s)", open[k])
+			case pf != nil && pf.fixedBy[k] > 0:
+				reason = fmt.Sprintf("%d finding(s) fixed", pf.fixedBy[k])
 			case open[k] == 0:
 				reason = "no open findings"
 			default:
 				reason = "fewer open findings"
 			}
+		}
+		if pf != nil && to > from && pf.dismissedBy[k] > 0 {
+			reason += fmt.Sprintf("; %d dismissed without a change, still counted", pf.dismissedBy[k])
 		}
 		changes = append(changes, ScoreChange{Name: name, From: from, To: to, Reason: reason})
 	}

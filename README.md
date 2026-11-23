@@ -180,8 +180,15 @@ Colours follow the score: green 80+, orange 50–79, red below 50.
 **Scores are anchored to the previous review** (`review.anchor_scores`, on by default), so they don't swing between runs when nothing material changed. Each review keeps the last scores, the commit they were given at and the findings then open, in its summary comment. The next review shows them to the model, which keeps each score unless the update changes it and says why when it does. Then, in code:
 - a change of less than 5 points keeps the previous score;
 - a score drops only when its dimension has an open finding;
-- a score rises only when its dimension has fewer open findings than before (or none), or the model explains why;
+- a score rises only when its dimension has fewer open findings than before (or none), or the model explains why and nothing in that dimension was dismissed or left unchecked;
 - the caps and floors from the findings below still win.
+
+**Only fixed findings raise a score.** Each summary also keeps the open findings and a hash of the code each one points at. The next review sorts every earlier finding it doesn't report again:
+- **fixed**: the code at it changed or its file is gone;
+- **dismissed**: the code is unchanged and its thread was resolved. Resolving a thread without changing the code doesn't clear the finding;
+- **still open**: it was reported again, or its code is unchanged and its thread is open. An incremental review doesn't look at files the push didn't touch.
+
+Dismissed and still-open findings keep counting towards the scores and their caps, though they aren't posted again. The summary says `Earlier findings: 2 fixed, 1 dismissed, 0 still open.` and lists the dismissed ones. A score that rises gives the count, for example `Security 55 → 95 (1 finding(s) fixed)`. The JSON result has `previous_findings` with `fixed`, `dismissed` and `still_open`, and the fixed and dismissed findings. Resolved threads are known on GitLab only; on GitHub and Bitbucket an unfixed finding counts as still open. Moved or re-indented code still counts as unchanged. Summaries written before this version have no findings kept, so their next review works as before.
 
 Reviewing the same commit again gives the same scores. The summary shows what moved and why, for example `Since the last review: Quality 82 → 76 (new major finding in auth.go)`. `--full` scores from scratch, and so does `review.anchor_scores: false`. Summaries written before this version are anchored to the scores table they show.
 
