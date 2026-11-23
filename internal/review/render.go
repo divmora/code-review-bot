@@ -132,7 +132,9 @@ func DescriptionBlock(res *Result, bot string) string {
 		}
 	}
 	b.WriteString(DescriptionEnd)
-	return b.String()
+	// Model text: no mentions (the code host client also stops quick
+	// actions; the author's own text outside the block isn't touched).
+	return vcs.NeutraliseMentions(b.String())
 }
 
 // ApplyDescription returns the new PR description, and whether it changed:

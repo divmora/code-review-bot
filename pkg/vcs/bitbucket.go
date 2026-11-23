@@ -253,7 +253,7 @@ func (b *BitbucketClient) BotState(ctx context.Context, pr *PR) (*BotState, erro
 }
 
 func bbContent(body string) map[string]string {
-	return map[string]string{"raw": toBitbucketMarkdown(body)}
+	return map[string]string{"raw": toBitbucketMarkdown(Sanitize(body))}
 }
 
 func (b *BitbucketClient) PostInline(ctx context.Context, pr *PR, _ string, comments []Comment) ([]Comment, error) {

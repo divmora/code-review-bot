@@ -262,7 +262,7 @@ func (g *GitLabClient) PostInline(ctx context.Context, pr *PR, _ string, comment
 		if c.OldLine > 0 {
 			pos["old_line"] = c.OldLine
 		}
-		_, err := g.r.do(ctx, "POST", g.mrPath(pr.Ref)+"/discussions", map[string]any{"body": c.Body, "position": pos}, nil)
+		_, err := g.r.do(ctx, "POST", g.mrPath(pr.Ref)+"/discussions", map[string]any{"body": Sanitize(c.Body), "position": pos}, nil)
 		if err != nil {
 			if s := statusOf(err); s == http.StatusBadRequest || s == http.StatusUnprocessableEntity {
 				rejected = append(rejected, c)
@@ -276,7 +276,7 @@ func (g *GitLabClient) PostInline(ctx context.Context, pr *PR, _ string, comment
 
 func (g *GitLabClient) UpsertSummary(ctx context.Context, pr *PR, st *BotState, body string) error {
 	if st != nil && st.SummaryID != "" {
-		_, err := g.r.do(ctx, "PUT", g.mrPath(pr.Ref)+"/notes/"+st.SummaryID, map[string]string{"body": body}, nil)
+		_, err := g.r.do(ctx, "PUT", g.mrPath(pr.Ref)+"/notes/"+st.SummaryID, map[string]string{"body": Sanitize(body)}, nil)
 		if err == nil || !errors.Is(err, ErrNotFound) {
 			return err
 		}
@@ -285,7 +285,7 @@ func (g *GitLabClient) UpsertSummary(ctx context.Context, pr *PR, st *BotState, 
 }
 
 func (g *GitLabClient) PostComment(ctx context.Context, pr *PR, body string) error {
-	_, err := g.r.do(ctx, "POST", g.mrPath(pr.Ref)+"/notes", map[string]string{"body": body}, nil)
+	_, err := g.r.do(ctx, "POST", g.mrPath(pr.Ref)+"/notes", map[string]string{"body": Sanitize(body)}, nil)
 	return err
 }
 
@@ -356,7 +356,7 @@ func (g *GitLabClient) UpdatePR(ctx context.Context, pr *PR, title, description 
 		body["title"] = *title
 	}
 	if description != nil {
-		body["description"] = *description
+		body["description"] = NeutraliseQuickActions(*description)
 	}
 	if len(body) == 0 {
 		return nil
