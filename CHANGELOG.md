@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/divmora/code-review-bot/compare/v0.6.0...v0.6.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* name the web host when the API is reached under another name ([#31](https://github.com/divmora/code-review-bot/issues/31)) ([d0c9d96](https://github.com/divmora/code-review-bot/commit/d0c9d9698202ae2f88b5788120e43d113e30e8b6))
+
 ## [0.6.0](https://github.com/divmora/code-review-bot/compare/v0.5.0...v0.6.0) (2026-11-23)
 
 
