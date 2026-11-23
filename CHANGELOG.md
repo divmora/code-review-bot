@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/divmora/code-review-bot/compare/v0.4.1...v0.5.0) (2026-11-23)
+
+
+### Features
+
+* anchor scores to the previous review so they don't swing between runs ([#12](https://github.com/divmora/code-review-bot/issues/12)) ([f22ebdc](https://github.com/divmora/code-review-bot/commit/f22ebdcb3d8ffd62159ede5abcf4d3846b0a60bc)), closes [#9](https://github.com/divmora/code-review-bot/issues/9)
+* approve pull requests when the review passes (--approve) ([#10](https://github.com/divmora/code-review-bot/issues/10)) ([da02e8f](https://github.com/divmora/code-review-bot/commit/da02e8f7a494485c584e2b60331977f06450caae))
+
 ## [0.4.1](https://github.com/divmora/code-review-bot/compare/v0.4.0...v0.4.1) (2026-11-22)
 
 
