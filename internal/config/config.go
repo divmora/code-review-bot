@@ -88,6 +88,12 @@ type Review struct {
 // GitHub configures github.com or GitHub Enterprise Server.
 type GitHub struct {
 	APIURL string `yaml:"api_url"` // default https://api.github.com
+	// Host is the web host of the PR URLs this API serves, when it can't
+	// be told from api_url (an API reached through a proxy or an internal
+	// name). Default: github.com for api.github.com, <name>.ghe.com for
+	// api.<name>.ghe.com, else api_url's host (Enterprise Server's
+	// https://<host>/api/v3). The token is only used for PRs on this host.
+	Host string `yaml:"host"`
 	// Token is a PAT or fine-grained token (CLI / simple server setups).
 	Token string `yaml:"token"`
 	// GitHub App credentials (recommended for the server).
@@ -109,7 +115,11 @@ type Bitbucket struct {
 
 // GitLab configures one GitLab instance (gitlab.com or self-managed).
 type GitLab struct {
-	BaseURL       string `yaml:"base_url"` // e.g. https://gitlab.example.com
+	BaseURL string `yaml:"base_url"` // e.g. https://gitlab.example.com
+	// Host is the web host of the MR URLs, when the API is reached under
+	// another name (an internal URL); default base_url's host. The token
+	// is only used for MRs on base_url's host or this one.
+	Host          string `yaml:"host"`
 	Token         string `yaml:"token"`
 	WebhookSecret string `yaml:"webhook_secret"`
 	SkipTLSVerify bool   `yaml:"skip_tls_verify"`
@@ -310,7 +320,7 @@ func (c *Config) profileNames() []string {
 // GitLabFor finds the instance config whose host matches.
 func (c *Config) GitLabFor(host string) (GitLab, bool) {
 	for _, g := range c.GitLab {
-		if hostOf(g.BaseURL) == strings.ToLower(host) {
+		if hostOf(g.BaseURL) == strings.ToLower(host) || g.Host != "" && strings.EqualFold(g.Host, host) {
 			return g, true
 		}
 	}

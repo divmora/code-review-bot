@@ -39,4 +39,26 @@ func TestClientForHostBinding(t *testing.T) {
 	if _, err := r.ClientFor(vcs.Ref{Platform: vcs.GitHub, Host: "github.com"}); err == nil {
 		t.Error("a GHES token doesn't go to github.com")
 	}
+
+	// GitHub Enterprise Cloud with data residency: api.<name>.ghe.com.
+	r.Cfg.GitHub.APIURL = "https://api.octocorp.ghe.com"
+	if _, err := r.ClientFor(vcs.Ref{Platform: vcs.GitHub, Host: "octocorp.ghe.com"}); err != nil {
+		t.Errorf("ghe.com: %v", err)
+	}
+	// An API reached under another name (a proxy, an internal URL) names
+	// the web host it serves; the token still goes only to api_url.
+	r.Cfg.GitHub = config.GitHub{APIURL: "http://127.0.0.1:9999", Host: "github.com"}
+	if _, err := r.ClientFor(vcs.Ref{Platform: vcs.GitHub, Host: "github.com"}); err != nil {
+		t.Errorf("github.host: %v", err)
+	}
+	if _, err := r.ClientFor(vcs.Ref{Platform: vcs.GitHub, Host: "127.0.0.1:9999"}); err == nil {
+		t.Error("with github.host set, only that host")
+	}
+	r.Cfg.GitLab = []config.GitLab{{BaseURL: "http://gitlab-webservice.gitlab.svc:8181", Host: "gitlab.example.com", Token: "glpat"}}
+	if _, err := r.ClientFor(vcs.Ref{Platform: vcs.GitLab, Host: "gitlab.example.com"}); err != nil {
+		t.Errorf("gitlab host: %v", err)
+	}
+	if _, err := r.ClientFor(vcs.Ref{Platform: vcs.GitLab, Host: "evil.example"}); err == nil {
+		t.Error("another GitLab host is still refused")
+	}
 }
