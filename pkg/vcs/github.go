@@ -39,7 +39,7 @@ type GitHubClient struct {
 func NewGitHub(apiURL string, tokens TokenSource) *GitHubClient {
 	return &GitHubClient{r: &rest{
 		base:   strings.TrimRight(apiURL, "/"),
-		hc:     &http.Client{Timeout: 60 * time.Second},
+		hc:     &http.Client{Timeout: 60 * time.Second, CheckRedirect: sameHostRedirects},
 		name:   "github",
 		accept: "application/vnd.github+json",
 		auth: func(ctx context.Context, req *http.Request) error {

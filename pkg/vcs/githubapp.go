@@ -54,7 +54,7 @@ func NewGitHubApp(appID int64, pemKey []byte, apiURL string) (*GitHubApp, error)
 	}
 	return &GitHubApp{
 		AppID: appID, key: key, apiURL: strings.TrimRight(apiURL, "/"),
-		hc: &http.Client{Timeout: 30 * time.Second}, tokens: map[int64]cachedToken{},
+		hc: &http.Client{Timeout: 30 * time.Second, CheckRedirect: sameHostRedirects}, tokens: map[int64]cachedToken{},
 	}, nil
 }
 

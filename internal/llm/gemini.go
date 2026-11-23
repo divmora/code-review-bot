@@ -33,7 +33,7 @@ func newGemini(cfg ModelConfig) (*geminiClient, error) {
 		cfg:     cfg,
 		url:     strings.TrimRight(base, "/") + "/models/" + url.PathEscape(model) + ":generateContent",
 		headers: mergeHeaders(map[string]string{"x-goog-api-key": key}, cfg.Headers),
-		hc:      &http.Client{Timeout: cfg.Timeout},
+		hc:      &http.Client{Timeout: cfg.Timeout, CheckRedirect: sameHostRedirects},
 	}, nil
 }
 

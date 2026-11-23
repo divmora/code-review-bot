@@ -29,7 +29,7 @@ func NewGitLab(baseURL, token string, skipTLSVerify bool) *GitLabClient {
 	}
 	return &GitLabClient{r: &rest{
 		base: strings.TrimRight(baseURL, "/") + "/api/v4",
-		hc:   &http.Client{Timeout: 60 * time.Second, Transport: tr},
+		hc:   &http.Client{Timeout: 60 * time.Second, Transport: tr, CheckRedirect: sameHostRedirects},
 		name: "gitlab",
 		auth: func(_ context.Context, req *http.Request) error {
 			if token == "" {

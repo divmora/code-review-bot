@@ -93,7 +93,7 @@ func newOpenAI(name string, spec openAICompat, cfg ModelConfig) (*openAIClient, 
 		cfg:      cfg,
 		url:      strings.TrimRight(base, "/") + "/chat/completions",
 		headers:  mergeHeaders(headers, cfg.Headers),
-		hc:       &http.Client{Timeout: cfg.Timeout},
+		hc:       &http.Client{Timeout: cfg.Timeout, CheckRedirect: sameHostRedirects},
 	}, nil
 }
 
