@@ -31,6 +31,7 @@ func (s StaticToken) Token(context.Context) (string, error) {
 type GitHubClient struct {
 	r    *rest
 	self selfCache // the token user's login; "" for an App or Actions token
+	stateKey
 }
 
 // NewGitHub creates a client. apiURL is https://api.github.com or
@@ -207,14 +208,15 @@ func (g *GitHubClient) BotState(ctx context.Context, pr *PR) (*BotState, error) 
 		Body string   `json:"body"`
 		User ghAuthor `json:"user"`
 	}
+	var pick summaryPick
 	err := g.pages(ctx, fmt.Sprintf("/repos/%s/issues/%d/comments?per_page=100", repoPath(pr.Repo), pr.Number), func(raw []byte) error {
 		var page []comment
 		if err := jsonUnmarshal(raw, &page); err != nil {
 			return err
 		}
 		for _, c := range page {
-			if isSummary(c.Body) && githubTrusted(self, c.User) {
-				parseSummary(fmt.Sprint(c.ID), c.Body, st)
+			if own := githubTrusted(self, c.User); isSummary(c.Body) && (own || g.signed(pr.Ref, c.Body)) {
+				pick.offer(fmt.Sprint(c.ID), c.Body, own)
 			}
 		}
 		return nil
@@ -222,6 +224,7 @@ func (g *GitHubClient) BotState(ctx context.Context, pr *PR) (*BotState, error) 
 	if err != nil {
 		return nil, err
 	}
+	pick.apply(st)
 	err = g.pages(ctx, fmt.Sprintf("/repos/%s/pulls/%d/comments?per_page=100", repoPath(pr.Repo), pr.Number), func(raw []byte) error {
 		var page []struct {
 			Body         string   `json:"body"`
@@ -234,8 +237,8 @@ func (g *GitHubClient) BotState(ctx context.Context, pr *PR) (*BotState, error) 
 			return err
 		}
 		for _, c := range page {
-			if !githubTrusted(self, c.User) {
-				continue // only the bot's own comments (issue #21)
+			if !githubTrusted(self, c.User) && !g.signed(pr.Ref, c.Body) {
+				continue // only the bot's own comments, or signed ones (issue #21)
 			}
 			collectFingerprints(c.Body, st.Fingerprints)
 			line := 0
@@ -276,7 +279,7 @@ func (g *GitHubClient) PostInline(ctx context.Context, pr *PR, header string, co
 	}
 	gcs := make([]ghReviewComment, len(comments))
 	for i, c := range comments {
-		c.Body = Sanitize(c.Body)
+		c.Body = g.sign(pr.Ref, Sanitize(c.Body))
 		gcs[i] = toGH(c)
 	}
 	path := fmt.Sprintf("/repos/%s/pulls/%d/reviews", repoPath(pr.Repo), pr.Number)
@@ -310,7 +313,7 @@ func (g *GitHubClient) PostInline(ctx context.Context, pr *PR, header string, co
 
 func (g *GitHubClient) UpsertSummary(ctx context.Context, pr *PR, st *BotState, body string) error {
 	if st != nil && st.SummaryID != "" {
-		_, err := g.r.do(ctx, "PATCH", fmt.Sprintf("/repos/%s/issues/comments/%s", repoPath(pr.Repo), st.SummaryID), map[string]string{"body": Sanitize(body)}, nil)
+		_, err := g.r.do(ctx, "PATCH", fmt.Sprintf("/repos/%s/issues/comments/%s", repoPath(pr.Repo), st.SummaryID), map[string]string{"body": g.sign(pr.Ref, Sanitize(body))}, nil)
 		if err == nil || statusOf(err) != http.StatusNotFound {
 			return err
 		}
@@ -319,7 +322,7 @@ func (g *GitHubClient) UpsertSummary(ctx context.Context, pr *PR, st *BotState, 
 }
 
 func (g *GitHubClient) PostComment(ctx context.Context, pr *PR, body string) error {
-	_, err := g.r.do(ctx, "POST", fmt.Sprintf("/repos/%s/issues/%d/comments", repoPath(pr.Repo), pr.Number), map[string]string{"body": Sanitize(body)}, nil)
+	_, err := g.r.do(ctx, "POST", fmt.Sprintf("/repos/%s/issues/%d/comments", repoPath(pr.Repo), pr.Number), map[string]string{"body": g.sign(pr.Ref, Sanitize(body))}, nil)
 	return err
 }
 

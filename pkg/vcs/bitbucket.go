@@ -27,6 +27,7 @@ const Bitbucket = "bitbucket"
 type BitbucketClient struct {
 	r    *rest
 	self selfCache // the token account's UUID
+	stateKey
 }
 
 // BitbucketAuth holds one of the two supported credentials:
@@ -258,18 +259,23 @@ func (b *BitbucketClient) BotState(ctx context.Context, pr *PR) (*BotState, erro
 		return nil, err
 	}
 	st := &BotState{Fingerprints: map[string]bool{}}
+	var pick summaryPick
 	err = b.pages(ctx, b.prPath(pr.Ref)+"/comments?pagelen=100", func(values json.RawMessage) error {
 		var page []bbComment
 		if err := json.Unmarshal(values, &page); err != nil {
 			return err
 		}
 		for _, c := range page {
-			if c.Deleted || !bitbucketTrusted(self, c.User.UUID, c.User.Type) {
-				continue // only the bot's own comments (issue #21)
+			if c.Deleted {
+				continue
 			}
 			body := fromBitbucketMarkdown(c.Content.Raw)
+			own := bitbucketTrusted(self, c.User.UUID, c.User.Type)
+			if !own && !b.signed(pr.Ref, body) {
+				continue // only the bot's own comments, or signed ones (issue #21)
+			}
 			if c.Inline == nil && isSummary(body) {
-				parseSummary(fmt.Sprint(c.ID), body, st)
+				pick.offer(fmt.Sprint(c.ID), body, own)
 			}
 			collectFingerprints(body, st.Fingerprints)
 			if c.Inline != nil {
@@ -286,18 +292,19 @@ func (b *BitbucketClient) BotState(ctx context.Context, pr *PR) (*BotState, erro
 		}
 		return nil
 	})
+	pick.apply(st)
 	return st, err
 }
 
-func bbContent(body string) map[string]string {
-	return map[string]string{"raw": toBitbucketMarkdown(Sanitize(body))}
+func (b *BitbucketClient) bbContent(ref Ref, body string) map[string]string {
+	return map[string]string{"raw": toBitbucketMarkdown(b.sign(ref, Sanitize(body)))}
 }
 
 func (b *BitbucketClient) PostInline(ctx context.Context, pr *PR, _ string, comments []Comment) ([]Comment, error) {
 	var rejected []Comment
 	for _, c := range comments {
 		body := map[string]any{
-			"content": bbContent(c.Body),
+			"content": b.bbContent(pr.Ref, c.Body),
 			"inline":  map[string]any{"path": c.Path, "to": c.Line},
 		}
 		if _, err := b.r.do(ctx, "POST", b.prPath(pr.Ref)+"/comments", body, nil); err != nil {
@@ -313,7 +320,7 @@ func (b *BitbucketClient) PostInline(ctx context.Context, pr *PR, _ string, comm
 
 func (b *BitbucketClient) UpsertSummary(ctx context.Context, pr *PR, st *BotState, body string) error {
 	if st != nil && st.SummaryID != "" {
-		_, err := b.r.do(ctx, "PUT", b.prPath(pr.Ref)+"/comments/"+url.PathEscape(st.SummaryID), map[string]any{"content": bbContent(body)}, nil)
+		_, err := b.r.do(ctx, "PUT", b.prPath(pr.Ref)+"/comments/"+url.PathEscape(st.SummaryID), map[string]any{"content": b.bbContent(pr.Ref, body)}, nil)
 		if err == nil || !errors.Is(err, ErrNotFound) {
 			return err
 		}
@@ -322,7 +329,7 @@ func (b *BitbucketClient) UpsertSummary(ctx context.Context, pr *PR, st *BotStat
 }
 
 func (b *BitbucketClient) PostComment(ctx context.Context, pr *PR, body string) error {
-	_, err := b.r.do(ctx, "POST", b.prPath(pr.Ref)+"/comments", map[string]any{"content": bbContent(body)}, nil)
+	_, err := b.r.do(ctx, "POST", b.prPath(pr.Ref)+"/comments", map[string]any{"content": b.bbContent(pr.Ref, body)}, nil)
 	return err
 }
 

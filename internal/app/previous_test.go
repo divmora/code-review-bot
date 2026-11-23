@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/divmora/code-review-bot/internal/review"
@@ -82,5 +84,22 @@ func TestPreviousFindingsChanged(t *testing.T) {
 	st, _ = json.Marshal(review.State{FileSummaries: map[string]string{}})
 	if out := r.previousFindings(context.Background(), c, &vcs.PR{HeadSHA: "new"}, &vcs.BotState{ReviewedSHA: "old", State: st}); out != nil {
 		t.Errorf("no findings kept: %+v", out)
+	}
+}
+
+// CODEREVIEW_STATE_KEY reaches the client: what the bot posts is signed.
+func TestStateKeySignsPostedComments(t *testing.T) {
+	llmSrv, _ := fakeLLM(t, `{"files":[],"comments":[{"path":"app.go","start_line":4,"end_line":4,"severity":"major","category":"bug","title":"panic","body":"x","confidence":0.9}]}`)
+	gh := &fakeGitHub{head: "head1"}
+	ghSrv := httptest.NewServer(gh.handler(t))
+	defer ghSrv.Close()
+	r := newRunner(t, llmSrv.URL)
+	r.Cfg.StateKey = "secret"
+	client := vcs.NewGitHub(ghSrv.URL, vcs.StaticToken("t"))
+	if _, err := r.Review(context.Background(), client, vcs.Ref{Platform: vcs.GitHub, Host: "github.com", Repo: "o/r", Number: 7}, Options{Post: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(gh.summary, "<!-- codereview:sig=") || len(gh.inline) == 0 || !strings.Contains(gh.inline[0], "<!-- codereview:sig=") {
+		t.Errorf("signed summary and comments:\n%s\n%v", gh.summary, gh.inline)
 	}
 }

@@ -18,6 +18,7 @@ import (
 type GitLabClient struct {
 	r    *rest
 	self selfCache // the token user's ID
+	stateKey
 }
 
 // NewGitLab creates a client for baseURL (e.g. https://gitlab.example.com).
@@ -239,6 +240,7 @@ func (g *GitLabClient) BotState(ctx context.Context, pr *PR) (*BotState, error) 
 		return nil, err
 	}
 	st := &BotState{Fingerprints: map[string]bool{}}
+	var pick summaryPick
 	err = g.pages(ctx, g.mrPath(pr.Ref)+"/discussions", func(raw []byte) error {
 		var page []struct {
 			Notes []glNote `json:"notes"`
@@ -248,11 +250,12 @@ func (g *GitLabClient) BotState(ctx context.Context, pr *PR) (*BotState, error) 
 		}
 		for _, d := range page {
 			for _, n := range d.Notes {
-				if n.System || strconv.FormatInt(n.Author.ID, 10) != self {
-					continue // only the bot's own notes (issue #21)
+				own := strconv.FormatInt(n.Author.ID, 10) == self
+				if n.System || !own && !g.signed(pr.Ref, n.Body) {
+					continue // only the bot's own notes, or signed ones (issue #21)
 				}
 				if isSummary(n.Body) {
-					parseSummary(strconv.FormatInt(n.ID, 10), n.Body, st)
+					pick.offer(strconv.FormatInt(n.ID, 10), n.Body, own)
 				}
 				collectFingerprints(n.Body, st.Fingerprints)
 				if n.Position != nil {
@@ -265,6 +268,7 @@ func (g *GitLabClient) BotState(ctx context.Context, pr *PR) (*BotState, error) 
 		}
 		return nil
 	})
+	pick.apply(st)
 	return st, err
 }
 
@@ -283,7 +287,7 @@ func (g *GitLabClient) PostInline(ctx context.Context, pr *PR, _ string, comment
 		if c.OldLine > 0 {
 			pos["old_line"] = c.OldLine
 		}
-		_, err := g.r.do(ctx, "POST", g.mrPath(pr.Ref)+"/discussions", map[string]any{"body": Sanitize(c.Body), "position": pos}, nil)
+		_, err := g.r.do(ctx, "POST", g.mrPath(pr.Ref)+"/discussions", map[string]any{"body": g.sign(pr.Ref, Sanitize(c.Body)), "position": pos}, nil)
 		if err != nil {
 			if s := statusOf(err); s == http.StatusBadRequest || s == http.StatusUnprocessableEntity {
 				rejected = append(rejected, c)
@@ -297,7 +301,7 @@ func (g *GitLabClient) PostInline(ctx context.Context, pr *PR, _ string, comment
 
 func (g *GitLabClient) UpsertSummary(ctx context.Context, pr *PR, st *BotState, body string) error {
 	if st != nil && st.SummaryID != "" {
-		_, err := g.r.do(ctx, "PUT", g.mrPath(pr.Ref)+"/notes/"+st.SummaryID, map[string]string{"body": Sanitize(body)}, nil)
+		_, err := g.r.do(ctx, "PUT", g.mrPath(pr.Ref)+"/notes/"+st.SummaryID, map[string]string{"body": g.sign(pr.Ref, Sanitize(body))}, nil)
 		if err == nil || !errors.Is(err, ErrNotFound) {
 			return err
 		}
@@ -306,7 +310,7 @@ func (g *GitLabClient) UpsertSummary(ctx context.Context, pr *PR, st *BotState, 
 }
 
 func (g *GitLabClient) PostComment(ctx context.Context, pr *PR, body string) error {
-	_, err := g.r.do(ctx, "POST", g.mrPath(pr.Ref)+"/notes", map[string]string{"body": Sanitize(body)}, nil)
+	_, err := g.r.do(ctx, "POST", g.mrPath(pr.Ref)+"/notes", map[string]string{"body": g.sign(pr.Ref, Sanitize(body))}, nil)
 	return err
 }
 

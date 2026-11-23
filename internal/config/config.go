@@ -17,6 +17,10 @@ import (
 type Config struct {
 	// Model is a profile name from Models or a "provider:model" spec.
 	Model string `yaml:"model"`
+	// StateKey (env CODEREVIEW_STATE_KEY only, never the file) signs the
+	// markers the bot reads back from its comments, so its comments from
+	// an earlier token user still count. Empty: only the token user's do.
+	StateKey string `yaml:"-"`
 	// Fallback models tried in order when Model fails.
 	Fallback []string `yaml:"fallback"`
 	// Models are named profiles. Switch provider by changing Model.
@@ -190,6 +194,7 @@ func (c *Config) Finalize() {
 }
 
 func (c *Config) applyEnv() {
+	c.StateKey = os.Getenv("CODEREVIEW_STATE_KEY")
 	if v := os.Getenv("CODEREVIEW_MODEL"); v != "" {
 		c.Model = v
 	}

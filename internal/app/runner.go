@@ -271,6 +271,7 @@ func (r *Runner) loadRepoConfig(ctx context.Context, c vcs.Client, pr *vcs.PR) (
 
 // Review runs one review end to end.
 func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Options) (*Outcome, error) {
+	r.useStateKey(c)
 	pr, err := c.GetPR(ctx, ref)
 	if err != nil {
 		return nil, fmt.Errorf("get pull request: %w", err)
@@ -451,6 +452,7 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 
 // Answer replies to a question on a PR and posts the reply when post is set.
 func (r *Runner) Answer(ctx context.Context, c vcs.Client, ref vcs.Ref, question string, post bool, ov *config.Overrides) (string, error) {
+	r.useStateKey(c)
 	pr, err := c.GetPR(ctx, ref)
 	if err != nil {
 		return "", err
@@ -477,6 +479,17 @@ func (r *Runner) Answer(ctx context.Context, c vcs.Client, ref vcs.Ref, question
 		}
 	}
 	return ans, nil
+}
+
+// useStateKey gives the client the key that signs the bot's markers
+// (CODEREVIEW_STATE_KEY), when one is set.
+func (r *Runner) useStateKey(c vcs.Client) {
+	if r.Cfg == nil || r.Cfg.StateKey == "" {
+		return
+	}
+	if k, ok := c.(vcs.StateKeyer); ok {
+		k.SetStateKey([]byte(r.Cfg.StateKey))
+	}
 }
 
 // ClientFor returns a code host client for a ref using static credentials
