@@ -153,7 +153,7 @@ func TestBotStateReadsPostedComments(t *testing.T) {
 	jb, _ := json.Marshal(body)
 	jq, _ := json.Marshal(qbody)
 	gl := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `[{"notes":[{"id":1,"body":`+string(jb)+`,"position":{"new_path":"a/E.php","new_line":289}},
+		_, _ = io.WriteString(w, `[{"notes":[{"id":1,"body":`+string(jb)+`,"resolved":true,"position":{"new_path":"a/E.php","new_line":289}},
 			{"id":2,"body":`+string(jq)+`,"position":{"new_path":"a/P.php","new_line":261}},
 			{"id":3,"body":"a human comment","position":{"new_path":"a/E.php","new_line":10}}]}]`)
 	}))
@@ -164,6 +164,9 @@ func TestBotStateReadsPostedComments(t *testing.T) {
 	}
 	if len(st.Comments) != 2 || st.Comments[0].Title != "Enforce the credit-limit rule" || st.Comments[0].Line != 289 || st.Comments[0].Question || !st.Comments[1].Question {
 		t.Errorf("gitlab comments = %+v", st.Comments)
+	}
+	if !st.Comments[0].Resolved || st.Comments[1].Resolved || st.Comments[0].Fingerprint != "abc123" {
+		t.Errorf("resolved threads and fingerprints: %+v", st.Comments)
 	}
 
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -103,6 +103,10 @@ type PostedComment struct {
 	Line     int
 	Title    string
 	Question bool
+	// Fingerprint is the finding's fingerprint from the comment.
+	Fingerprint string
+	// Resolved: its thread is resolved (known on GitLab; false elsewhere).
+	Resolved bool
 }
 
 var titleRe = regexp.MustCompile(`(?m)^\*\*(.+?)\*\*\s*$`)
@@ -115,6 +119,9 @@ func parsePosted(path string, line int, body string) (PostedComment, bool) {
 	pc := PostedComment{Path: path, Line: line, Question: strings.Contains(body, "❓ Question")}
 	if m := titleRe.FindStringSubmatch(body); m != nil {
 		pc.Title = m[1]
+	}
+	if m := fpRe.FindStringSubmatch(body); m != nil {
+		pc.Fingerprint = m[1]
 	}
 	return pc, true
 }

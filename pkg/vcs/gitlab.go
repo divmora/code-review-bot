@@ -209,6 +209,7 @@ type glNote struct {
 	ID       int64  `json:"id"`
 	Body     string `json:"body"`
 	System   bool   `json:"system"`
+	Resolved bool   `json:"resolved"`
 	Position *struct {
 		NewPath string `json:"new_path"`
 		NewLine int    `json:"new_line"`
@@ -235,6 +236,7 @@ func (g *GitLabClient) BotState(ctx context.Context, pr *PR) (*BotState, error) 
 				collectFingerprints(n.Body, st.Fingerprints)
 				if n.Position != nil {
 					if pc, ok := parsePosted(n.Position.NewPath, n.Position.NewLine, n.Body); ok {
+						pc.Resolved = n.Resolved
 						st.Comments = append(st.Comments, pc)
 					}
 				}

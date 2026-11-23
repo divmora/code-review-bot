@@ -72,6 +72,8 @@ type Finding struct {
 	Kind string `json:"kind,omitempty"`
 
 	lineText string
+	// carried is the earlier finding this one stands for (Result.Carried).
+	carried *PrevFinding
 	// repeat marks a finding already posted on the PR while it goes
 	// through verification with the new ones.
 	repeat bool
@@ -153,6 +155,14 @@ type Result struct {
 	HeadSHA       string `json:"head_sha"`
 	BaseSHA       string `json:"base_sha"`
 	IncrementalOf string `json:"incremental_of,omitempty"`
+	// Previous says what became of the previous review's open findings:
+	// fixed, dismissed (thread resolved, code unchanged) or still open.
+	Previous *PreviousFindings `json:"previous_findings,omitempty"`
+	// Carried are earlier findings not reported again whose code didn't
+	// change: not posted, but they count towards the scores.
+	Carried []Finding `json:"-"`
+	// open is what the summary's state keeps for the next review.
+	open []PrevFinding
 }
 
 // allFindings are the new, overflow and repeated findings: everything still
@@ -188,6 +198,9 @@ type Input struct {
 	PrevScores    *Scores
 	PrevScoresSHA string
 	PrevOpen      map[string]int
+	// PrevFindings are the previous review's open findings, with Changed
+	// set by the caller (nil when unknown: older summaries, --full).
+	PrevFindings []PrevFinding
 }
 
 // Engine runs reviews.
@@ -408,7 +421,9 @@ func (e *Engine) Run(ctx context.Context, in Input) (*Result, error) {
 		kept = e.filter(res, in, kept) // fingerprints and dedupes findings the verifier added
 	}
 	e.rankAndCap(res, in, kept)
+	e.reconcile(res, in)
 	e.walkthrough(ctx, res, in, files)
+	res.open = res.openState(in.Files)
 	res.Duration = time.Since(start)
 	return res, nil
 }
@@ -1025,6 +1040,9 @@ func (e *Engine) walkthrough(ctx context.Context, res *Result, in Input, files [
 		}
 		fmt.Fprintf(&b, "- [%s/%s] %s:%d %s\n", f.Severity, kind, f.Path, f.EndLine, f.Title)
 	}
+	for _, f := range res.Carried {
+		fmt.Fprintf(&b, "- [%s/%s] %s:%d %s (from an earlier review, not fixed: its code is unchanged)\n", f.Severity, f.Category, f.Path, f.EndLine, f.Title)
+	}
 	b.WriteString("</findings>\n")
 	if s := strings.TrimSpace(in.Repo.HighLevelSummaryInstructions); s != "" {
 		b.WriteString("\nInstructions for the summary and highlights (from the repository config): " + s + "\n")
@@ -1103,7 +1121,7 @@ func (e *Engine) walkthrough(ctx context.Context, res *Result, in Input, files [
 		e.noScores(res, in, "the walkthrough gave no scores")
 		return
 	}
-	sc := finalScores(Scores{Quality: int(out.Scores.Quality), Security: int(out.Scores.Security), Maintainability: int(out.Scores.Maintainability)}, res.allFindings())
+	sc := finalScores(Scores{Quality: int(out.Scores.Quality), Security: int(out.Scores.Security), Maintainability: int(out.Scores.Maintainability)}, res.scoreFindings())
 	res.Scores = &sc
 	e.anchor(res, in, map[string]string{"quality": out.ScoreReasons.Quality, "security": out.ScoreReasons.Security, "maintainability": out.ScoreReasons.Maintainability})
 }
@@ -1132,7 +1150,15 @@ func (e *Engine) anchor(res *Result, in Input, reasons map[string]string) {
 		res.Scores = &sc
 		return
 	}
-	sc, changes := anchorScores(*prev, *res.Scores, res.allFindings(), in.PrevOpen, reasons)
+	prevOpen := in.PrevOpen
+	if in.PrevFindings != nil { // counted the same way as now
+		var fs []Finding
+		for _, p := range in.PrevFindings {
+			fs = append(fs, Finding{Severity: p.Severity, Category: p.Category})
+		}
+		prevOpen = OpenFindings(fs)
+	}
+	sc, changes := anchorScores(*prev, *res.Scores, res.scoreFindings(), prevOpen, reasons, res.Previous)
 	res.Scores, res.ScoreChanges = &sc, changes
 }
 
