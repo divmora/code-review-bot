@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.6.0](https://github.com/divmora/code-review-bot/compare/v0.5.0...v0.6.0) (2026-11-23)
+
+
+### Features
+
+* only fixed findings raise scores; tell fixed from dismissed ([#24](https://github.com/divmora/code-review-bot/issues/24)) ([dfda305](https://github.com/divmora/code-review-bot/commit/dfda3051e425014229db5b0e326b9480a8eb2632)), closes [#15](https://github.com/divmora/code-review-bot/issues/15)
+
+
+### Bug Fixes
+
+* give existing score labels their band colour ([#18](https://github.com/divmora/code-review-bot/issues/18)) ([1d97934](https://github.com/divmora/code-review-bot/commit/1d979349ebe634a81ac13abc6e183ff98cde2e22))
+* read the walkthrough leniently and don't guess scores when it fails ([#16](https://github.com/divmora/code-review-bot/issues/16)) ([e5a3f06](https://github.com/divmora/code-review-bot/commit/e5a3f06739565901ccd13ad971a0588e404f990d)), closes [#14](https://github.com/divmora/code-review-bot/issues/14)
+* **security:** files the review skipped keep the bot from approving ([#27](https://github.com/divmora/code-review-bot/issues/27)) ([7bef50a](https://github.com/divmora/code-review-bot/commit/7bef50ae8cbd768ab85d06faade89ef49d8a4387)), closes [#20](https://github.com/divmora/code-review-bot/issues/20)
+* **security:** neutralise GitLab quick actions and mentions in posted text ([#25](https://github.com/divmora/code-review-bot/issues/25)) ([ed3455f](https://github.com/divmora/code-review-bot/commit/ed3455f1175498152a7bc9687ae93f8fe8776caa))
+* **security:** read back only the bot's own (or signed) comments as its state ([#28](https://github.com/divmora/code-review-bot/issues/28)) ([d26071f](https://github.com/divmora/code-review-bot/commit/d26071f48fb295d585c32368942e6239af67fc80))
+* **security:** send tokens only to their configured host; refuse cross-host redirects ([#29](https://github.com/divmora/code-review-bot/issues/29)) ([4932c78](https://github.com/divmora/code-review-bot/commit/4932c7864952247d3414326008caaf44a67375ba)), closes [#23](https://github.com/divmora/code-review-bot/issues/23)
+* **security:** withdraw the bot's approval when a new commit can't be judged ([#26](https://github.com/divmora/code-review-bot/issues/26)) ([0de525e](https://github.com/divmora/code-review-bot/commit/0de525e0e9693f8bcfadee641d9819e3abf9b8e5)), closes [#22](https://github.com/divmora/code-review-bot/issues/22)
+
 ## [0.5.0](https://github.com/divmora/code-review-bot/compare/v0.4.1...v0.5.0) (2026-11-23)
 
 
