@@ -3,7 +3,9 @@ package review
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/divmora/code-review-bot/pkg/vcs"
@@ -60,6 +62,32 @@ func ToComments(fs []Finding, platform string) []vcs.Comment {
 // State is persisted in the summary comment between runs.
 type State struct {
 	FileSummaries map[string]string `json:"file_summaries"`
+	// Scores are this review's scores at ScoresSHA, and OpenFindings the
+	// findings then open per score, which the next review anchors to.
+	Scores       *Scores        `json:"scores,omitempty"`
+	ScoresSHA    string         `json:"scores_sha,omitempty"`
+	OpenFindings map[string]int `json:"open_findings,omitempty"`
+}
+
+// summaryScoresRe reads the scores row of an older summary's table.
+var summaryScoresRe = regexp.MustCompile(`## Scores\s*\n\s*\| Quality \| Security \| Maintainability \|\s*\n[^\n]*\n\|[^|0-9]*\*\*(\d{1,3})\*\*[^|]*\|[^|0-9]*\*\*(\d{1,3})\*\*[^|]*\|[^|0-9]*\*\*(\d{1,3})\*\*`)
+
+// SummaryScores reads the scores from a summary comment written before
+// they were kept in its state.
+func SummaryScores(body string) (*Scores, bool) {
+	m := summaryScoresRe.FindStringSubmatch(body)
+	if m == nil {
+		return nil, false
+	}
+	var v [3]int
+	for i := range v {
+		n, err := strconv.Atoi(m[i+1])
+		if err != nil || n < 1 || n > 100 {
+			return nil, false
+		}
+		v[i] = n
+	}
+	return &Scores{Quality: v[0], Security: v[1], Maintainability: v[2]}, true
 }
 
 // SummaryOptions tweak the summary comment.
@@ -197,6 +225,13 @@ func SummaryMarkdown(res *Result, opts SummaryOptions) string {
 	if res.Scores != nil {
 		b.WriteString("## Scores\n\n| Quality | Security | Maintainability |\n|:---:|:---:|:---:|\n")
 		fmt.Fprintf(&b, "| %s | %s | %s |\n\n", scoreCell(res.Scores.Quality), scoreCell(res.Scores.Security), scoreCell(res.Scores.Maintainability))
+		if len(res.ScoreChanges) > 0 {
+			parts := make([]string, 0, len(res.ScoreChanges))
+			for _, c := range res.ScoreChanges {
+				parts = append(parts, fmt.Sprintf("%s %d → %d (%s)", c.Name, c.From, c.To, c.Reason))
+			}
+			b.WriteString("Since the last review: " + strings.Join(parts, " · ") + "\n\n")
+		}
 	}
 	if res.Effort > 0 {
 		fmt.Fprintf(&b, "## Estimated code review effort\n\n🎯 %d (%s) | ⏱️ %s minutes\n\n", res.Effort, effortLabel[res.Effort], effortMinutes[res.Effort])
@@ -288,7 +323,11 @@ func SummaryMarkdown(res *Result, opts SummaryOptions) string {
 	if res.HeadSHA != "" {
 		b.WriteString(vcs.ReviewedSHATag(res.HeadSHA) + "\n")
 	}
-	st, _ := json.Marshal(State{FileSummaries: res.FileSummaries})
+	state := State{FileSummaries: res.FileSummaries}
+	if res.Scores != nil {
+		state.Scores, state.ScoresSHA, state.OpenFindings = res.Scores, res.HeadSHA, OpenFindings(res.allFindings())
+	}
+	st, _ := json.Marshal(state)
 	b.WriteString(vcs.StateTag(st) + "\n")
 	return b.String()
 }

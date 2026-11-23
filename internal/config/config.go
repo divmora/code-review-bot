@@ -73,6 +73,10 @@ type Review struct {
 	// run to run; a second pass catches issues one run misses, at the cost
 	// of one more reviewer call per batch. Default 1.
 	Passes int `yaml:"passes"`
+	// AnchorScores starts each review's scores from the previous review's,
+	// so they change only when the change does (default on; --full always
+	// scores from scratch).
+	AnchorScores *bool `yaml:"anchor_scores"`
 	// RepoConfigFile is the per-repo config path at the PR head.
 	RepoConfigFile string `yaml:"repo_config_file"`
 }

@@ -361,6 +361,10 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 		}
 	}
 
+	if !opts.Full && (r.Cfg.Review.AnchorScores == nil || *r.Cfg.Review.AnchorScores) {
+		anchorTo(&in, state)
+	}
+
 	model, err := r.LLM(rc.Model, opts.Overrides != nil && opts.Overrides.Model != nil && *opts.Overrides.Model != "")
 	if err != nil {
 		return nil, err
@@ -511,4 +515,20 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// anchorTo gives the review the previous scores to start from: those kept
+// in the summary's state, or (older summaries) the scores table in it.
+func anchorTo(in *review.Input, state *vcs.BotState) {
+	if state == nil {
+		return
+	}
+	var prev review.State
+	if len(state.State) > 0 && json.Unmarshal(state.State, &prev) == nil && prev.Scores != nil {
+		in.PrevScores, in.PrevScoresSHA, in.PrevOpen = prev.Scores, prev.ScoresSHA, prev.OpenFindings
+		return
+	}
+	if sc, ok := review.SummaryScores(state.SummaryBody); ok {
+		in.PrevScores, in.PrevScoresSHA = sc, state.ReviewedSHA
+	}
 }

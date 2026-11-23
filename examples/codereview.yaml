@@ -69,6 +69,7 @@ review:
   # passes: 2              # review each batch twice and merge the findings (catches more, costs one more call per batch)
   verify_can_drop: confident  # confident (default): drop speculative or clearly false findings at any severity; minor: only minor/nitpick; all
   verify_can_add: false     # let the verifier add findings it thinks were missed (unverified; off by default)
+  # anchor_scores: true     # start scores from the previous review's, so they move only when the change does (--full rescores)
   repo_config_file: .codereview.yaml
   defaults:                 # same keys as .codereview.yaml; repos override them
     profile: balanced

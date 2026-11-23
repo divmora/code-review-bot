@@ -175,6 +175,14 @@ With `--post --score-labels` the scores are also set as labels on the PR/MR, rep
 - GitHub: `Quality Score: 85`.
 Colours follow the score: green 80+, orange 50–79, red below 50.
 
+**Scores are anchored to the previous review** (`review.anchor_scores`, on by default), so they don't swing between runs when nothing material changed. Each review keeps the last scores, the commit they were given at and the findings then open, in its summary comment. The next review shows them to the model, which keeps each score unless the update changes it and says why when it does. Then, in code:
+- a change of less than 5 points keeps the previous score;
+- a score drops only when its dimension has an open finding;
+- a score rises only when its dimension has fewer open findings than before (or none), or the model explains why;
+- the caps and floors from the findings below still win.
+
+Reviewing the same commit again gives the same scores. The summary shows what moved and why, for example `Since the last review: Quality 82 → 76 (new major finding in auth.go)`. `--full` scores from scratch, and so does `review.anchor_scores: false`. Summaries written before this version are anchored to the scores table they show.
+
 ## Approving pull requests
 
 With `--post --approve` the bot approves the PR/MR when the review passes its rule, as the token's user (or the GitHub App):
