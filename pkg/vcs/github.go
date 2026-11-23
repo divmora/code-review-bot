@@ -256,6 +256,7 @@ func (g *GitHubClient) PostInline(ctx context.Context, pr *PR, header string, co
 	}
 	gcs := make([]ghReviewComment, len(comments))
 	for i, c := range comments {
+		c.Body = Sanitize(c.Body)
 		gcs[i] = toGH(c)
 	}
 	path := fmt.Sprintf("/repos/%s/pulls/%d/reviews", repoPath(pr.Repo), pr.Number)
@@ -289,7 +290,7 @@ func (g *GitHubClient) PostInline(ctx context.Context, pr *PR, header string, co
 
 func (g *GitHubClient) UpsertSummary(ctx context.Context, pr *PR, st *BotState, body string) error {
 	if st != nil && st.SummaryID != "" {
-		_, err := g.r.do(ctx, "PATCH", fmt.Sprintf("/repos/%s/issues/comments/%s", repoPath(pr.Repo), st.SummaryID), map[string]string{"body": body}, nil)
+		_, err := g.r.do(ctx, "PATCH", fmt.Sprintf("/repos/%s/issues/comments/%s", repoPath(pr.Repo), st.SummaryID), map[string]string{"body": Sanitize(body)}, nil)
 		if err == nil || statusOf(err) != http.StatusNotFound {
 			return err
 		}
@@ -298,7 +299,7 @@ func (g *GitHubClient) UpsertSummary(ctx context.Context, pr *PR, st *BotState, 
 }
 
 func (g *GitHubClient) PostComment(ctx context.Context, pr *PR, body string) error {
-	_, err := g.r.do(ctx, "POST", fmt.Sprintf("/repos/%s/issues/%d/comments", repoPath(pr.Repo), pr.Number), map[string]string{"body": body}, nil)
+	_, err := g.r.do(ctx, "POST", fmt.Sprintf("/repos/%s/issues/%d/comments", repoPath(pr.Repo), pr.Number), map[string]string{"body": Sanitize(body)}, nil)
 	return err
 }
 
