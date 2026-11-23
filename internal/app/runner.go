@@ -87,6 +87,10 @@ type Options struct {
 	// CommitStatus sets a "codereview" status on the reviewed commit:
 	// running during the review, then success or failed (with Post only).
 	CommitStatus bool
+	// Approval approves the PR when the review passes its rule, and may
+	// withdraw an earlier approval (with Post only). Nil leaves approvals
+	// alone.
+	Approval *Approval
 }
 
 // Outcome of a review.
@@ -96,6 +100,10 @@ type Outcome struct {
 	SkipReason string // set when the review did not run
 	Posted     int
 	Rejected   []review.Finding
+	// Approval is what happened to the bot's approval (see the Approval*
+	// constants; empty without Options.Approval), and ApprovalReason why.
+	Approval       string
+	ApprovalReason string
 }
 
 // LLM returns a (cached) client for the model chain. repoModel is a model
@@ -425,6 +433,9 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 		if err := c.SetScoreLabels(ctx, pr, labels); err != nil {
 			r.Logger.Warn("could not set score labels", "error", err)
 		}
+	}
+	if opts.Approval != nil {
+		out.Approval, out.ApprovalReason = r.approve(ctx, c, pr, res, *opts.Approval, bot)
 	}
 	return out, nil
 }

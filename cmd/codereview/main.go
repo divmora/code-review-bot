@@ -154,6 +154,10 @@ func cmdReview(ctx context.Context, args []string) error {
 	commands := fs.Bool("commands", false, "advertise @bot chat commands in the summary (when a webhook service answers them)")
 	scoreLabels := fs.Bool("score-labels", false, "with --post: set Quality/Security/Maintainability score labels on the PR/MR")
 	commitStatus := fs.Bool("commit-status", false, "with --post: set a \"codereview\" status on the reviewed commit (running, then success/failed)")
+	approve := fs.Bool("approve", false, "with --post: approve the PR/MR when the review passes (see --approve-block, --approve-min-score)")
+	approveBlock := fs.String("approve-block", "major", "with --approve: a finding at or above this severity blocks approval: critical, major, minor, nitpick, or none (approve whatever the review found)")
+	approveMinScore := fs.Int("approve-min-score", 0, "with --approve: also need every score (1-100) at least this high; 0 ignores the scores")
+	approveWithdraw := fs.Bool("approve-withdraw", false, "with --approve: withdraw the bot's earlier approval when a review doesn't pass")
 	verifyModel := fs.String("verify-model", "", "model for the verification pass (profile or provider:model); default review.verify_model or the review model")
 	fs.Usage = func() {
 		_, _ = fmt.Fprintf(fs.Output(), "Usage: codereview review [PR_URL] [flags]\n\nWithout PR_URL, the PR is detected from GitHub Actions, GitLab CI or Bitbucket Pipelines, or use --local.\n\n")
@@ -165,8 +169,19 @@ func cmdReview(ctx context.Context, args []string) error {
 		return err
 	}
 	runner := &app.Runner{Cfg: cfg, Logger: logger, ModelOverride: c.model, VerifyModelOverride: *verifyModel}
-	if (*scoreLabels || *commitStatus) && !*post {
-		return errors.New("--score-labels and --commit-status need --post")
+	if (*scoreLabels || *commitStatus || *approve) && !*post {
+		return errors.New("--score-labels, --commit-status and --approve need --post")
+	}
+	var approval *app.Approval
+	if *approve {
+		block, err := approvalBlock(*approveBlock)
+		if err != nil {
+			return err
+		}
+		if *approveMinScore < 0 || *approveMinScore > 100 {
+			return errors.New("--approve-min-score: want 0 to 100")
+		}
+		approval = &app.Approval{Block: block, MinScore: *approveMinScore, Withdraw: *approveWithdraw}
 	}
 	// CODEREVIEW_OVERRIDES carries per-repository settings as JSON (set by
 	// Divmora Code Review Console); flags override it.
@@ -215,7 +230,7 @@ func cmdReview(ctx context.Context, args []string) error {
 		}
 	}
 
-	out, err := runner.Review(ctx, client, ref, app.Options{Auto: *auto, Full: *full, Post: *post, Overrides: ov, Commands: *commands, ScoreLabels: *scoreLabels, CommitStatus: *commitStatus})
+	out, err := runner.Review(ctx, client, ref, app.Options{Auto: *auto, Full: *full, Post: *post, Overrides: ov, Commands: *commands, ScoreLabels: *scoreLabels, CommitStatus: *commitStatus, Approval: approval})
 	if err != nil {
 		return err
 	}
@@ -253,6 +268,9 @@ func cmdReview(ctx context.Context, args []string) error {
 			m["posted"] = out.Posted
 			m["rejected"] = len(out.Rejected)
 			m["pr_url"] = out.PR.URL
+			if out.Approval != "" {
+				m["approval"], m["approval_reason"] = out.Approval, out.ApprovalReason
+			}
 			b, _ := json.MarshalIndent(m, "", "  ")
 			text = string(b) + "\n"
 		}
@@ -635,9 +653,28 @@ func reorder(args []string) []string {
 	return append(flags, pos...)
 }
 
-var boolFlags = map[string]bool{"local": true, "post": true, "full": true, "auto": true, "commands": true, "score-labels": true, "commit-status": true, "verbose": true, "h": true, "help": true}
+var boolFlags = map[string]bool{"local": true, "post": true, "full": true, "auto": true, "commands": true, "score-labels": true, "commit-status": true,
+	"approve": true, "approve-withdraw": true, "verbose": true, "h": true, "help": true}
 
 func isTTY(f *os.File) bool {
 	st, err := f.Stat()
 	return err == nil && st.Mode()&os.ModeCharDevice != 0
+}
+
+// approvalBlock reads --approve-block strictly: a typo must not approve
+// more than intended.
+func approvalBlock(v string) (review.Severity, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "none", "":
+		return "", nil
+	case "critical":
+		return review.Critical, nil
+	case "major":
+		return review.Major, nil
+	case "minor":
+		return review.Minor, nil
+	case "nitpick":
+		return review.Nitpick, nil
+	}
+	return "", fmt.Errorf("--approve-block %q: want critical, major, minor, nitpick or none", v)
 }
