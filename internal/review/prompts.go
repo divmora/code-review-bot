@@ -1,7 +1,10 @@
 package review
 
 import (
+	"encoding/json"
 	"fmt"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -252,6 +255,53 @@ type summaryOutput struct {
 		Security        string `json:"security"`
 		Maintainability string `json:"maintainability"`
 	} `json:"score_reasons"`
+}
+
+// decodeSummary reads the walkthrough leniently: a field the model got
+// wrong (a string where a list or object belongs) is dropped, and listed
+// in dropped, instead of failing the whole walkthrough. A list or object
+// sent as a JSON-encoded string is decoded. err is set only when the
+// output isn't a JSON object at all.
+func decodeSummary(b []byte) (out summaryOutput, dropped []string, err error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(b, &fields); err != nil {
+		return out, nil, err
+	}
+	targets := map[string]any{
+		"summary": &out.Summary, "cohorts": &out.Cohorts, "effort": &out.Effort, "poem": &out.Poem,
+		"title": &out.Title, "title_ok": &out.TitleOK, "description_check": &out.DescriptionCheck,
+		"highlights": &out.Highlights, "scores": &out.Scores, "score_reasons": &out.ScoreReasons,
+	}
+	names := make([]string, 0, len(fields))
+	for k := range fields {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		t, ok := targets[k]
+		if !ok {
+			continue
+		}
+		raw := fields[k]
+		if json.Unmarshal(raw, t) == nil {
+			continue
+		}
+		var inner string // "[{...}]": the value encoded once more
+		if json.Unmarshal(raw, &inner) == nil {
+			if inner = strings.TrimSpace(inner); inner == "" || json.Unmarshal([]byte(inner), t) == nil {
+				continue
+			}
+		}
+		reset(t)
+		dropped = append(dropped, k)
+	}
+	return out, dropped, nil
+}
+
+// reset zeroes what a failed decode may have half filled.
+func reset(t any) {
+	v := reflect.ValueOf(t).Elem()
+	v.Set(reflect.Zero(v.Type()))
 }
 
 const chatSystem = `You are a code review assistant replying to a question on a pull request.

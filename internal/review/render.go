@@ -232,6 +232,8 @@ func SummaryMarkdown(res *Result, opts SummaryOptions) string {
 			}
 			b.WriteString("Since the last review: " + strings.Join(parts, " · ") + "\n\n")
 		}
+	} else if res.ScoresNote != "" {
+		b.WriteString("_No scores this time: " + escapeInline(res.ScoresNote) + "._\n\n")
 	}
 	if res.Effort > 0 {
 		fmt.Fprintf(&b, "## Estimated code review effort\n\n🎯 %d (%s) | ⏱️ %s minutes\n\n", res.Effort, effortLabel[res.Effort], effortMinutes[res.Effort])
@@ -326,6 +328,9 @@ func SummaryMarkdown(res *Result, opts SummaryOptions) string {
 	state := State{FileSummaries: res.FileSummaries}
 	if res.Scores != nil {
 		state.Scores, state.ScoresSHA, state.OpenFindings = res.Scores, res.HeadSHA, OpenFindings(res.allFindings())
+	} else if c := res.carry; c != nil {
+		sc := c.Scores
+		state.Scores, state.ScoresSHA, state.OpenFindings = &sc, c.SHA, c.Open
 	}
 	st, _ := json.Marshal(state)
 	b.WriteString(vcs.StateTag(st) + "\n")

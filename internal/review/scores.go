@@ -68,27 +68,6 @@ func scoreCaps(fs []Finding) Scores {
 	return c
 }
 
-// fallbackScores derives scores from findings when the model gives none.
-func fallbackScores(fs []Finding) Scores {
-	s := Scores{Quality: 95, Security: 100, Maintainability: 95}
-	penalty := map[Severity]int{Critical: 45, Major: 20, Minor: 6, Nitpick: 1}
-	for _, f := range fs {
-		if f.Kind == KindQuestion {
-			continue
-		}
-		p := penalty[f.Severity]
-		switch f.Category {
-		case "security":
-			s.Security -= p
-		case "maintainability", "style", "docs":
-			s.Maintainability -= p
-		default:
-			s.Quality -= p
-		}
-	}
-	return clampScores(s, scoreCaps(fs))
-}
-
 // scoreFloors raises scores the findings do not support: a dimension with no
 // remaining issue of at least minor severity (questions and findings the
 // verifier removed do not count) scores at least 85, so a disputed or
@@ -269,4 +248,11 @@ func abs(v int) int {
 		return -v
 	}
 	return v
+}
+
+// carriedScores are the previous review's scores, passed on unchanged.
+type carriedScores struct {
+	Scores Scores
+	SHA    string
+	Open   map[string]int
 }
