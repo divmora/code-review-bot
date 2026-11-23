@@ -142,7 +142,7 @@ Every response is also parsed leniently (fenced or prose-wrapped JSON), so weake
 Tips for CI:
 - **Keep it advisory.** The GitLab example sets `allow_failure: true` so a provider outage never blocks a pipeline. Add `--fail-on critical` only when you want the review to gate merges.
 - **Drafts are skipped** with `--auto` unless `auto_review.drafts: true`. So are closed PRs and commits that were already reviewed.
-- **Self-managed GitLab** is detected from `CI_SERVER_URL` (or `GITLAB_URL`). If it uses a private CA, add the CA to the image or point `SSL_CERT_FILE` at it. As a last resort, set `skip_tls_verify` for that instance in `codereview.yaml`:
+- **Self-managed GitLab** is detected from `CI_SERVER_URL` (or `GITLAB_URL`). `GITLAB_TOKEN` is sent only to that host (or gitlab.com when neither is set), and `GITHUB_TOKEN` only to `GITHUB_API_URL` (`https://<host>/api/v3` for GitHub Enterprise Server; set inside GitHub Actions): a PR URL on any other host is refused rather than handed the token, and the code host clients refuse redirects to another host. If it uses a private CA, add the CA to the image or point `SSL_CERT_FILE` at it. As a last resort, set `skip_tls_verify` for that instance in `codereview.yaml`:
 
   ```yaml
   gitlab:

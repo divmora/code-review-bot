@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -492,27 +492,43 @@ func (r *Runner) useStateKey(c vcs.Client) {
 	}
 }
 
+// githubWebHost is the web host whose PRs an API URL serves:
+// api.github.com serves github.com; Enterprise Server's https://<host>/api/v3
+// serves <host>.
+func githubWebHost(api string) string {
+	u, err := url.Parse(api)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	if strings.EqualFold(u.Host, "api.github.com") {
+		return "github.com"
+	}
+	return strings.ToLower(u.Host)
+}
+
 // ClientFor returns a code host client for a ref using static credentials
 // (CLI and token-based servers).
 func (r *Runner) ClientFor(ref vcs.Ref) (vcs.Client, error) {
 	switch ref.Platform {
 	case vcs.GitHub:
+		// The token only goes to the configured API (github.api_url or
+		// GITHUB_API_URL, set in GitHub Actions), never to a host taken
+		// from the PR URL (issue #23).
 		api := r.Cfg.GitHub.APIURL
-		if ref.Host != "github.com" && api == "https://api.github.com" {
-			api = "https://" + ref.Host + "/api/v3" // GitHub Enterprise Server
+		if want := githubWebHost(api); !strings.EqualFold(ref.Host, want) {
+			return nil, fmt.Errorf("%s isn't the configured GitHub (%s): set GITHUB_API_URL (or github.api_url) to https://%s/api/v3 for GitHub Enterprise Server", ref.Host, want, ref.Host)
 		}
 		return vcs.NewGitHub(api, vcs.StaticToken(r.Cfg.GitHub.Token)), nil
 	case vcs.Bitbucket:
 		b := r.Cfg.Bitbucket
 		return vcs.NewBitbucket(b.APIURL, vcs.BitbucketAuth{Token: b.Token, Email: b.Email, APIToken: b.APIToken}), nil
 	case vcs.GitLab:
+		// A token only goes to its own host: GITLAB_TOKEN to GITLAB_URL,
+		// CI_SERVER_URL or gitlab.com, never to a host taken from the MR
+		// URL (issue #23).
 		gl, ok := r.Cfg.GitLabFor(ref.Host)
 		if !ok {
-			token := os.Getenv("GITLAB_TOKEN")
-			if token == "" {
-				return nil, fmt.Errorf("no GitLab config for host %s: add it under gitlab: in the config or set GITLAB_TOKEN", ref.Host)
-			}
-			gl = config.GitLab{BaseURL: "https://" + ref.Host, Token: token}
+			return nil, fmt.Errorf("no GitLab config for host %s: add it under gitlab: in the config, or set GITLAB_URL=https://%s (GITLAB_TOKEN is only sent to GITLAB_URL, CI_SERVER_URL or gitlab.com)", ref.Host, ref.Host)
 		}
 		return vcs.NewGitLab(gl.BaseURL, gl.Token, gl.SkipTLSVerify), nil
 	}

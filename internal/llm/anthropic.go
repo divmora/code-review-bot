@@ -34,7 +34,7 @@ func newAnthropic(cfg ModelConfig) (*anthropicClient, error) {
 			"x-api-key":         key,
 			"anthropic-version": "2023-06-01",
 		}, cfg.Headers),
-		hc: &http.Client{Timeout: cfg.Timeout},
+		hc: &http.Client{Timeout: cfg.Timeout, CheckRedirect: sameHostRedirects},
 	}, nil
 }
 

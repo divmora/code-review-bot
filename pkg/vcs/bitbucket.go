@@ -46,7 +46,7 @@ func NewBitbucket(apiURL string, auth BitbucketAuth) *BitbucketClient {
 	}
 	return &BitbucketClient{r: &rest{
 		base:   strings.TrimRight(apiURL, "/"),
-		hc:     &http.Client{Timeout: 60 * time.Second},
+		hc:     &http.Client{Timeout: 60 * time.Second, CheckRedirect: sameHostRedirects},
 		name:   "bitbucket",
 		accept: "application/json",
 		auth: func(_ context.Context, req *http.Request) error {
