@@ -56,7 +56,7 @@ func NeutraliseQuickActions(body string) string {
 
 // zwsp is a zero-width space: after "@" it keeps a mention from linking
 // or notifying anyone, and shows nothing.
-const zwsp = "​"
+const zwsp = "\u200b"
 
 // NeutraliseMentions keeps @mentions in text the bot posts from notifying
 // anyone (@all, a user, another bot): a zero-width space goes after each
