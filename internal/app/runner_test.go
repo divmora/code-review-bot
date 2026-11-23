@@ -366,7 +366,8 @@ func TestCommitStatusLifecycle(t *testing.T) {
 	if len(gh.statuses) != 2 || gh.statuses[0]["state"] != "pending" || gh.statuses[1]["state"] != "success" || gh.statuses[1]["sha"] != "head1" {
 		t.Fatalf("statuses = %v", gh.statuses)
 	}
-	if d, _ := gh.statuses[1]["description"].(string); !strings.HasPrefix(d, "Reviewed: 1 comment · Quality") {
+	// The fake model answers the walkthrough with review JSON: no scores, none guessed.
+	if d, _ := gh.statuses[1]["description"].(string); d != "Reviewed: 1 comment" {
 		t.Errorf("success description = %q", d)
 	}
 

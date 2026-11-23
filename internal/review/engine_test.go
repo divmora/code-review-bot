@@ -397,7 +397,7 @@ func TestVerificationPass(t *testing.T) {
 	}
 }
 
-func TestVerifyDisabledAndFallbackScores(t *testing.T) {
+func TestVerifyDisabledAndNoGuessedScores(t *testing.T) {
 	fake := &scripted{review: func(llm.Request) (string, error) {
 		return `{"files":[],"comments":[{"path":"main.go","start_line":4,"end_line":4,"severity":"critical","category":"security","title":"sqli","body":"x","confidence":0.9}]}`, nil
 	}}
@@ -415,9 +415,9 @@ func TestVerifyDisabledAndFallbackScores(t *testing.T) {
 			t.Error("verify: false must skip the verification call")
 		}
 	}
-	// No walkthrough scripted, so scores come from findings: critical security caps at 40.
-	if res.Scores == nil || res.Scores.Security > 40 || res.Scores.Quality < 90 {
-		t.Errorf("fallback scores = %+v", res.Scores)
+	// No walkthrough scripted: no scores are guessed from the findings.
+	if res.Scores != nil || res.ScoresNote == "" {
+		t.Errorf("scores without a walkthrough = %+v (%q)", res.Scores, res.ScoresNote)
 	}
 }
 
@@ -542,7 +542,7 @@ func TestPostedBefore(t *testing.T) {
 func TestRepeatedFindingsStillCountForScores(t *testing.T) {
 	fake := &scripted{review: func(llm.Request) (string, error) {
 		return `{"files":[],"comments":[{"path":"main.go","start_line":4,"end_line":4,"severity":"critical","category":"security","title":"SQL injection in search query","body":"x","confidence":0.9}]}`, nil
-	}}
+	}, summary: `{"summary":"s","cohorts":[],"effort":1,"scores":{"quality":95,"security":95,"maintainability":95}}`}
 	off := false
 	lim := limits()
 	lim.Verify = &off

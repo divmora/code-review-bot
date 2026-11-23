@@ -137,15 +137,22 @@ type Result struct {
 	// ScoreChanges are the scores that moved from the previous review,
 	// with why (empty without a previous review to anchor to).
 	ScoreChanges []ScoreChange `json:"score_changes,omitempty"`
+	// ScoresNote says why Scores is empty when the review gave none (for
+	// example, the walkthrough failed). No scores are made up then.
+	ScoresNote string `json:"scores_note,omitempty"`
 	// Verification reports the second-pass check of the findings.
-	Verification  *Verification `json:"verification,omitempty"`
-	TooLarge      bool          `json:"too_large,omitempty"`
-	Model         string        `json:"model"`
-	Usage         llm.Usage     `json:"usage"`
-	Duration      time.Duration `json:"duration"`
-	HeadSHA       string        `json:"head_sha"`
-	BaseSHA       string        `json:"base_sha"`
-	IncrementalOf string        `json:"incremental_of,omitempty"`
+	Verification *Verification `json:"verification,omitempty"`
+	TooLarge     bool          `json:"too_large,omitempty"`
+	Model        string        `json:"model"`
+	Usage        llm.Usage     `json:"usage"`
+	Duration     time.Duration `json:"duration"`
+
+	// carry are the previous review's scores, kept in the summary's state
+	// when this review gave none, so the next review still anchors to them.
+	carry         *carriedScores
+	HeadSHA       string `json:"head_sha"`
+	BaseSHA       string `json:"base_sha"`
+	IncrementalOf string `json:"incremental_of,omitempty"`
 }
 
 // allFindings are the new, overflow and repeated findings: everything still
@@ -1048,8 +1055,9 @@ func (e *Engine) walkthrough(ctx context.Context, res *Result, in Input, files [
 		MaxTokens: 4096,
 	})
 	var out summaryOutput
+	var dropped []string
 	if err == nil {
-		err = json.Unmarshal(resp.JSON, &out)
+		out, dropped, err = decodeSummary(resp.JSON)
 	}
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
@@ -1057,10 +1065,15 @@ func (e *Engine) walkthrough(ctx context.Context, res *Result, in Input, files [
 		}
 		res.Summary = fmt.Sprintf("Reviewed %d file(s).", len(res.Reviewed))
 		res.Cohorts = defaultCohorts(paths, res.FileSummaries)
-		sc := fallbackScores(res.allFindings())
-		res.Scores = &sc
-		e.anchor(res, in, nil)
+		e.noScores(res, in, "the walkthrough failed")
 		return
+	}
+	if len(dropped) > 0 {
+		log := e.Logger
+		if log == nil {
+			log = slog.Default()
+		}
+		log.Warn("walkthrough: ignored fields the model got wrong", "fields", dropped)
 	}
 	res.Usage.InputTokens += resp.Usage.InputTokens
 	res.Usage.OutputTokens += resp.Usage.OutputTokens
@@ -1086,15 +1099,24 @@ func (e *Engine) walkthrough(ctx context.Context, res *Result, in Input, files [
 			res.Highlights = append(res.Highlights, Highlight{Type: h.Type, Items: items})
 		}
 	}
-	all := res.allFindings()
-	if out.Scores.Quality == 0 && out.Scores.Security == 0 && out.Scores.Maintainability == 0 {
-		sc := fallbackScores(all)
-		res.Scores = &sc
-	} else {
-		sc := finalScores(Scores{Quality: int(out.Scores.Quality), Security: int(out.Scores.Security), Maintainability: int(out.Scores.Maintainability)}, all)
-		res.Scores = &sc
+	if out.Scores.Quality < 1 || out.Scores.Security < 1 || out.Scores.Maintainability < 1 {
+		e.noScores(res, in, "the walkthrough gave no scores")
+		return
 	}
+	sc := finalScores(Scores{Quality: int(out.Scores.Quality), Security: int(out.Scores.Security), Maintainability: int(out.Scores.Maintainability)}, res.allFindings())
+	res.Scores = &sc
 	e.anchor(res, in, map[string]string{"quality": out.ScoreReasons.Quality, "security": out.ScoreReasons.Security, "maintainability": out.ScoreReasons.Maintainability})
+}
+
+// noScores leaves the review without scores rather than guessing them
+// from the findings (a guess dragged quality to 1 on large changes). The
+// previous review's scores are kept in the state for the next review.
+func (e *Engine) noScores(res *Result, in Input, why string) {
+	res.Scores, res.ScoresNote = nil, why
+	if in.PrevScores != nil {
+		res.ScoresNote += "; scores are unchanged from the last review"
+		res.carry = &carriedScores{Scores: *in.PrevScores, SHA: in.PrevScoresSHA, Open: in.PrevOpen}
+	}
 }
 
 // anchor moves res.Scores from the previous review's scores only as far

@@ -170,6 +170,8 @@ The CLI is designed to be driven by schedulers such as Divmora Code Review Conso
 
 Every review rates the change from **1 to 100** on **Quality**, **Security** and **Maintainability**. The scores appear in the summary, the CLI output and the JSON result. They're capped by the findings: a critical security finding caps Security at 40, a major one at 70.
 
+The walkthrough step gives the scores. A field the model gets wrong there (a string where a list belongs, say) is ignored and the rest kept. If the walkthrough fails or gives no scores, the review has **no scores** rather than guessed ones: the JSON result leaves `scores` out and says why in `scores_note`, labels are left as they are, and the previous review's scores are kept for the next one to anchor to.
+
 With `--post --score-labels` the scores are also set as labels on the PR/MR, replacing earlier scores:
 - GitLab: scoped labels, `Quality Score::85`;
 - GitHub: `Quality Score: 85`.
