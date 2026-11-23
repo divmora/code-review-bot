@@ -220,6 +220,15 @@ var summarySchema = &llm.Schema{
 					"maintainability": map[string]any{"type": "integer", "minimum": 1, "maximum": 100},
 				},
 			},
+			"score_reasons": map[string]any{
+				"type":        "object",
+				"description": "Only when previous scores are given: why a score changed from its previous value, in a few words (empty when unchanged)",
+				"properties": map[string]any{
+					"quality":         map[string]any{"type": "string"},
+					"security":        map[string]any{"type": "string"},
+					"maintainability": map[string]any{"type": "string"},
+				},
+			},
 		},
 	},
 }
@@ -238,6 +247,11 @@ type summaryOutput struct {
 		Security        flexInt `json:"security"`
 		Maintainability flexInt `json:"maintainability"`
 	} `json:"scores"`
+	ScoreReasons struct {
+		Quality         string `json:"quality"`
+		Security        string `json:"security"`
+		Maintainability string `json:"maintainability"`
+	} `json:"score_reasons"`
 }
 
 const chatSystem = `You are a code review assistant replying to a question on a pull request.

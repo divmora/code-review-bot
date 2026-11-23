@@ -134,6 +134,9 @@ type Result struct {
 	DescriptionCheck string `json:"description_check,omitempty"`
 	// Scores rate the change 1-100 (quality, security, maintainability).
 	Scores *Scores `json:"scores,omitempty"`
+	// ScoreChanges are the scores that moved from the previous review,
+	// with why (empty without a previous review to anchor to).
+	ScoreChanges []ScoreChange `json:"score_changes,omitempty"`
 	// Verification reports the second-pass check of the findings.
 	Verification  *Verification `json:"verification,omitempty"`
 	TooLarge      bool          `json:"too_large,omitempty"`
@@ -172,6 +175,12 @@ type Input struct {
 	// Existing are the bot's inline comments already on the PR; a finding
 	// about the same code and topic counts as already posted.
 	Existing []vcs.PostedComment
+	// PrevScores are the previous review's scores, at PrevScoresSHA, to
+	// anchor this review's scores to (nil scores from scratch). PrevOpen
+	// is how many findings were open per score then (nil when unknown).
+	PrevScores    *Scores
+	PrevScoresSHA string
+	PrevOpen      map[string]int
 }
 
 // Engine runs reviews.
@@ -1019,6 +1028,10 @@ func (e *Engine) walkthrough(ctx context.Context, res *Result, in Input, files [
 	if in.PR != nil && in.PR.Title != "" {
 		b.WriteString("\nCurrent PR title: " + in.PR.Title + "\n")
 	}
+	if p := in.PrevScores; p != nil {
+		fmt.Fprintf(&b, "\nPrevious scores (at %s): quality %d, security %d, maintainability %d. Keep each score unless this update changes it; "+
+			"when you change a score, say why in score_reasons in a few words.\n", shortSHA(in.PrevScoresSHA), p.Quality, p.Security, p.Maintainability)
+	}
 	if in.Repo.Poem != nil && *in.Repo.Poem {
 		b.WriteString("\nInclude a poem.")
 	} else {
@@ -1046,6 +1059,7 @@ func (e *Engine) walkthrough(ctx context.Context, res *Result, in Input, files [
 		res.Cohorts = defaultCohorts(paths, res.FileSummaries)
 		sc := fallbackScores(res.allFindings())
 		res.Scores = &sc
+		e.anchor(res, in, nil)
 		return
 	}
 	res.Usage.InputTokens += resp.Usage.InputTokens
@@ -1080,6 +1094,34 @@ func (e *Engine) walkthrough(ctx context.Context, res *Result, in Input, files [
 		sc := finalScores(Scores{Quality: int(out.Scores.Quality), Security: int(out.Scores.Security), Maintainability: int(out.Scores.Maintainability)}, all)
 		res.Scores = &sc
 	}
+	e.anchor(res, in, map[string]string{"quality": out.ScoreReasons.Quality, "security": out.ScoreReasons.Security, "maintainability": out.ScoreReasons.Maintainability})
+}
+
+// anchor moves res.Scores from the previous review's scores only as far
+// as the change supports (see anchorScores). The same commit reviewed
+// again keeps the previous scores.
+func (e *Engine) anchor(res *Result, in Input, reasons map[string]string) {
+	prev := in.PrevScores
+	if prev == nil || res.Scores == nil {
+		return
+	}
+	if in.PR != nil && in.PrevScoresSHA != "" && in.PrevScoresSHA == in.PR.HeadSHA {
+		sc := *prev
+		res.Scores = &sc
+		return
+	}
+	sc, changes := anchorScores(*prev, *res.Scores, res.allFindings(), in.PrevOpen, reasons)
+	res.Scores, res.ScoreChanges = &sc, changes
+}
+
+func shortSHA(s string) string {
+	if s == "" {
+		return "the last review"
+	}
+	if len(s) > 8 {
+		return s[:8]
+	}
+	return s
 }
 
 // fixCohorts drops unknown files and adds files the model left out.

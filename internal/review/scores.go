@@ -1,5 +1,10 @@
 package review
 
+import (
+	"fmt"
+	"strings"
+)
+
 // Scores rate the change from 1 (poor) to 100 (excellent).
 type Scores struct {
 	Quality         int `json:"quality"`
@@ -142,4 +147,126 @@ func ScoreBand(v int) string {
 		return "orange"
 	}
 	return "red"
+}
+
+// Score anchoring (issue #9): each run's scores start from the previous
+// review's, so they move only when the change does.
+
+// scoreAnchorThreshold is the smallest change a score makes from the
+// previous review; smaller ones keep the previous value.
+const scoreAnchorThreshold = 5
+
+// scoreDimensions are the score keys, in display order, with their names.
+var scoreDimensions = [][2]string{{"quality", "Quality"}, {"security", "Security"}, {"maintainability", "Maintainability"}}
+
+// ScoreChange is a score that moved from the previous review, and why.
+type ScoreChange struct {
+	Name   string `json:"name"` // Quality, Security, Maintainability
+	From   int    `json:"from"`
+	To     int    `json:"to"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// dimensionOf maps a finding's category to the score it affects.
+func dimensionOf(category string) string {
+	switch category {
+	case "security":
+		return "security"
+	case "maintainability", "style", "docs":
+		return "maintainability"
+	}
+	return "quality"
+}
+
+// OpenFindings counts findings that affect a score (minor or worse, not
+// questions) by score key.
+func OpenFindings(fs []Finding) map[string]int {
+	out := map[string]int{}
+	for _, f := range fs {
+		if f.Kind == KindQuestion || !f.Severity.AtLeast(Minor) {
+			continue
+		}
+		out[dimensionOf(f.Category)]++
+	}
+	return out
+}
+
+func (s Scores) getKey(k string) int {
+	switch k {
+	case "quality":
+		return s.Quality
+	case "security":
+		return s.Security
+	}
+	return s.Maintainability
+}
+
+func (s *Scores) setKey(k string, v int) {
+	switch k {
+	case "quality":
+		s.Quality = v
+	case "security":
+		s.Security = v
+	default:
+		s.Maintainability = v
+	}
+}
+
+// anchorScores keeps each score at its previous value unless the change
+// supports a new one:
+//   - a change smaller than scoreAnchorThreshold keeps the previous value;
+//   - a score drops only with an open finding in its dimension;
+//   - a score rises only when that dimension has fewer open findings than
+//     before (or none), or the model said why.
+//
+// The floors and caps from the findings are applied last and still win.
+// prevOpen is nil when the previous counts aren't known (older summaries).
+func anchorScores(prev, proposed Scores, fs []Finding, prevOpen map[string]int, reasons map[string]string) (Scores, []ScoreChange) {
+	open := OpenFindings(fs)
+	next := proposed
+	for _, d := range scoreDimensions {
+		k := d[0]
+		p, v := prev.getKey(k), proposed.getKey(k)
+		switch {
+		case abs(v-p) < scoreAnchorThreshold:
+			v = p
+		case v < p && open[k] == 0:
+			v = p
+		case v > p && open[k] > 0 && strings.TrimSpace(reasons[k]) == "" && (prevOpen == nil || open[k] >= prevOpen[k]):
+			v = p
+		}
+		next.setKey(k, v)
+	}
+	next = finalScores(next, fs)
+	var changes []ScoreChange
+	for _, d := range scoreDimensions {
+		k, name := d[0], d[1]
+		from, to := prev.getKey(k), next.getKey(k)
+		if from == to {
+			continue
+		}
+		reason := strings.TrimSpace(reasons[k])
+		if len(reason) > 200 {
+			reason = reason[:200]
+		}
+		if reason == "" {
+			switch {
+			case to < from:
+				reason = fmt.Sprintf("%d open finding(s)", open[k])
+			case open[k] == 0:
+				reason = "no open findings"
+			default:
+				reason = "fewer open findings"
+			}
+		}
+		changes = append(changes, ScoreChange{Name: name, From: from, To: to, Reason: reason})
+	}
+	return next, changes
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
