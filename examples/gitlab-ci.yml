@@ -4,7 +4,7 @@
 ai-code-review:
   stage: test
   image:
-    name: ghcr.io/divmora/code-review-bot:0.4.1 # x-release-please-version
+    name: ghcr.io/divmora/code-review-bot:0.5.0 # x-release-please-version
     entrypoint: [""]   # the image entrypoint is the binary; GitLab needs a shell
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
