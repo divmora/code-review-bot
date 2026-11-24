@@ -72,6 +72,8 @@ type State struct {
 	Findings []PrevFinding `json:"findings,omitempty"`
 	// Diagram is the flow diagram, kept for incremental reviews.
 	Diagram *Diagram `json:"diagram,omitempty"`
+	// Labels are the labels picked and the ones the bot set itself.
+	Labels *LabelState `json:"labels,omitempty"`
 }
 
 // summaryScoresRe reads the scores row of an older summary's table.
@@ -217,6 +219,7 @@ func SummaryMarkdown(res *Result, opts SummaryOptions) string {
 		b.WriteString("\n")
 	}
 	b.WriteString(DiagramSection(res.Diagram))
+	b.WriteString(labelsLine(res.Labels))
 	if res.DescriptionCheck != "" || (!res.TitleAccurate && res.SuggestedTitle != "") {
 		b.WriteString("## 📝 Description check\n\n")
 		if res.DescriptionCheck != "" {
@@ -348,7 +351,7 @@ func SummaryMarkdown(res *Result, opts SummaryOptions) string {
 	if res.HeadSHA != "" {
 		b.WriteString(vcs.ReviewedSHATag(res.HeadSHA) + "\n")
 	}
-	state := State{FileSummaries: res.FileSummaries, Findings: res.open, Diagram: res.Diagram}
+	state := State{FileSummaries: res.FileSummaries, Findings: res.open, Diagram: res.Diagram, Labels: res.LabelState}
 	if res.Scores != nil {
 		state.Scores, state.ScoresSHA, state.OpenFindings = res.Scores, res.HeadSHA, OpenFindings(res.scoreFindings())
 	} else if c := res.carry; c != nil {

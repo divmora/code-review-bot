@@ -37,6 +37,18 @@ poem: false
 # 4+ source files in 2+ top-level folders, 3+ cohorts) or always.
 # diagram: auto
 
+# Labels: pick the project's own labels for the change. off (default),
+# suggest (a line in the walkthrough) or apply (also set them on the PR).
+# Only labels the project already has and allow matches are used; the bot
+# never creates a label and never removes or replaces one a person set.
+# labels:
+#   mode: suggest
+#   allow: ["type::*", "bug::*", "component::*", "dependency-type::*", "backend"]
+#   suggest_only: ["priority::*", "severity::*"]   # shown, never set
+#   max: 4
+#   instructions: |
+#     type::maintenance for dependency bumps and refactors with no behaviour change.
+
 auto_review:
   enabled: true
   drafts: false

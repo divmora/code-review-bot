@@ -160,6 +160,7 @@ func cmdReview(ctx context.Context, args []string) error {
 	approveWithdraw := fs.Bool("approve-withdraw", true, "with --approve: withdraw the bot's earlier approval when a review doesn't pass, or can't judge a new commit (too large, partly failed); --approve-withdraw=false leaves it")
 	verifyModel := fs.String("verify-model", "", "model for the verification pass (profile or provider:model); default review.verify_model or the review model")
 	diagram := fs.String("diagram", "", "flow diagram in the walkthrough: off, auto (when the change spans several layers) or always; default the repo config's diagram (off)")
+	labels := fs.String("labels", "", "label suggestions: off, suggest (a line in the walkthrough) or apply (also set them on the PR, with --post); default the repo config's labels.mode (off). Only the project's own labels that labels.allow matches are used")
 	diagramOnly := fs.Bool("diagram-only", false, "draw the flow diagram for the current head from the last review, without reviewing again; with --post it replaces the diagram in the summary")
 	fs.Usage = func() {
 		_, _ = fmt.Fprintf(fs.Output(), "Usage: codereview review [PR_URL] [flags]\n\nWithout PR_URL, the PR is detected from GitHub Actions, GitLab CI or Bitbucket Pipelines, or use --local.\n\n")
@@ -201,6 +202,20 @@ func cmdReview(ctx context.Context, args []string) error {
 			ov = &config.Overrides{}
 		}
 		ov.Diagram = diagram
+	}
+	if *labels != "" {
+		switch *labels {
+		case config.LabelsOff, config.LabelsSuggest, config.LabelsApply:
+		default:
+			return fmt.Errorf("--labels %q: want off, suggest or apply", *labels)
+		}
+		if ov == nil {
+			ov = &config.Overrides{}
+		}
+		if ov.Labels == nil {
+			ov.Labels = &config.Labels{}
+		}
+		ov.Labels.Mode = *labels
 	}
 	if *diagramOnly && (*local || *full || *auto || *approve || *scoreLabels || *commitStatus) {
 		return errors.New("--diagram-only can't be combined with --local, --full, --auto, --approve, --score-labels or --commit-status")
