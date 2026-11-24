@@ -159,6 +159,8 @@ func cmdReview(ctx context.Context, args []string) error {
 	approveMinScore := fs.Int("approve-min-score", 0, "with --approve: also need every score (1-100) at least this high; 0 ignores the scores")
 	approveWithdraw := fs.Bool("approve-withdraw", true, "with --approve: withdraw the bot's earlier approval when a review doesn't pass, or can't judge a new commit (too large, partly failed); --approve-withdraw=false leaves it")
 	verifyModel := fs.String("verify-model", "", "model for the verification pass (profile or provider:model); default review.verify_model or the review model")
+	diagram := fs.String("diagram", "", "flow diagram in the walkthrough: off, auto (when the change spans several layers) or always; default the repo config's diagram (off)")
+	diagramOnly := fs.Bool("diagram-only", false, "draw the flow diagram for the current head from the last review, without reviewing again; with --post it replaces the diagram in the summary")
 	fs.Usage = func() {
 		_, _ = fmt.Fprintf(fs.Output(), "Usage: codereview review [PR_URL] [flags]\n\nWithout PR_URL, the PR is detected from GitHub Actions, GitLab CI or Bitbucket Pipelines, or use --local.\n\n")
 		fs.PrintDefaults()
@@ -188,6 +190,20 @@ func cmdReview(ctx context.Context, args []string) error {
 	ov, err := overridesFromEnv(cfg)
 	if err != nil {
 		return err
+	}
+	if *diagram != "" {
+		switch *diagram {
+		case review.DiagramOff, review.DiagramAuto, review.DiagramAlways:
+		default:
+			return fmt.Errorf("--diagram %q: want off, auto or always", *diagram)
+		}
+		if ov == nil {
+			ov = &config.Overrides{}
+		}
+		ov.Diagram = diagram
+	}
+	if *diagramOnly && (*local || *full || *auto || *approve || *scoreLabels || *commitStatus) {
+		return errors.New("--diagram-only can't be combined with --local, --full, --auto, --approve, --score-labels or --commit-status")
 	}
 	if *profile != "" || *maxComments > 0 || *minSeverity != "" {
 		runner.Override = func(rc *config.RepoConfig) {
@@ -230,6 +246,9 @@ func cmdReview(ctx context.Context, args []string) error {
 		}
 	}
 
+	if *diagramOnly {
+		return diagramOnlyRun(ctx, runner, client, ref, *post, ov, *format, *output, logger)
+	}
 	out, err := runner.Review(ctx, client, ref, app.Options{Auto: *auto, Full: *full, Post: *post, Overrides: ov, Commands: *commands, ScoreLabels: *scoreLabels, CommitStatus: *commitStatus, Approval: approval})
 	if err != nil {
 		return err
@@ -291,6 +310,33 @@ func cmdReview(ctx context.Context, args []string) error {
 		}
 	}
 	return nil
+}
+
+// diagramOnlyRun draws the flow diagram for a PR's head (the "@bot
+// diagram" command) and reports it: the Mermaid as text or markdown, or
+// JSON with the diagram and its token use (for the console).
+func diagramOnlyRun(ctx context.Context, runner *app.Runner, client vcs.Client, ref vcs.Ref, post bool, ov *config.Overrides, format, output string, logger *slog.Logger) error {
+	out, err := runner.Diagram(ctx, client, ref, post, ov)
+	if err != nil {
+		return err
+	}
+	if post && out.Diagram != nil {
+		logger.Info("published flow diagram", "pr", ref.String())
+	}
+	switch format {
+	case "json":
+		m := map[string]any{"diagram_only": true, "diagram": out.Diagram, "diagram_note": out.Note, "diagram_usage": out.Usage, "usage": out.Usage, "model": out.Model, "head_sha": out.PR.HeadSHA, "pr_url": out.PR.URL}
+		b, _ := json.MarshalIndent(m, "", "  ")
+		return writeReport(output, string(b)+"\n")
+	case "markdown", "md":
+		return writeReport(output, review.DiagramSection(out.Diagram))
+	case "text":
+		if out.Diagram == nil {
+			return writeReport(output, "No flow diagram: "+out.Note+"\n")
+		}
+		return writeReport(output, out.Diagram.Mermaid+"\n")
+	}
+	return fmt.Errorf("unknown --format %q", format)
 }
 
 func cmdAsk(ctx context.Context, args []string) error {

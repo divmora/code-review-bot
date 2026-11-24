@@ -358,6 +358,7 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 			var prev review.State
 			if len(state.State) > 0 && json.Unmarshal(state.State, &prev) == nil {
 				in.PrevFileSummaries = prev.FileSummaries
+				in.PrevDiagram = prev.Diagram
 			}
 		}
 	}
@@ -446,6 +447,87 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 		// The last review was of this same head: an approval then was for it.
 		sameHead := state != nil && state.ReviewedSHA != "" && state.ReviewedSHA == pr.HeadSHA
 		out.Approval, out.ApprovalReason = r.approve(ctx, c, pr, res, *opts.Approval, bot, sameHead)
+	}
+	return out, nil
+}
+
+// DiagramOutcome is what a diagram-only run did.
+type DiagramOutcome struct {
+	PR      *vcs.PR
+	Diagram *review.Diagram
+	Usage   llm.Usage
+	Model   string
+	// Note says why no diagram was drawn.
+	Note string
+}
+
+// ErrDiagramOff is returned when the admin turned flow diagrams off for
+// the repository: "@bot diagram" can't override that.
+var ErrDiagramOff = errors.New("flow diagrams are turned off for this repository")
+
+// Diagram draws the flow diagram for the PR's head without reviewing it
+// again (the "@bot diagram" command), from the file summaries and open
+// findings the last review stored, and with post replaces the diagram in
+// the summary comment. It works whatever the repository's diagram mode,
+// unless the admin's overrides set it to off.
+func (r *Runner) Diagram(ctx context.Context, c vcs.Client, ref vcs.Ref, post bool, ov *config.Overrides) (*DiagramOutcome, error) {
+	r.useStateKey(c)
+	if ov != nil && ov.Diagram != nil && *ov.Diagram == review.DiagramOff {
+		return nil, ErrDiagramOff
+	}
+	pr, err := c.GetPR(ctx, ref)
+	if err != nil {
+		return nil, fmt.Errorf("get pull request: %w", err)
+	}
+	out := &DiagramOutcome{PR: pr}
+	rc, _ := r.RepoConfig(ctx, c, pr)
+	ov.Apply(&rc)
+	state, err := c.BotState(ctx, pr)
+	if err != nil {
+		return nil, fmt.Errorf("read previous review state: %w", err)
+	}
+	var prev review.State
+	if len(state.State) == 0 || json.Unmarshal(state.State, &prev) != nil || len(prev.FileSummaries) == 0 {
+		return nil, errors.New("no review to draw from yet: review the pull request first")
+	}
+	files, err := c.Files(ctx, pr)
+	if err != nil {
+		return nil, fmt.Errorf("list changed files: %w", err)
+	}
+	kept := files[:0:0]
+	for _, f := range files {
+		if rc.IncludePath(f.Path) {
+			kept = append(kept, f)
+		}
+	}
+	model, err := r.LLM(rc.Model, ov != nil && ov.Model != nil && *ov.Model != "")
+	if err != nil {
+		return nil, err
+	}
+	out.Model = model.Name()
+	eng := &review.Engine{LLM: model, Limits: r.Cfg.Review, Logger: r.Logger.With("pr", ref.String())}
+	d, usage, err := eng.DiagramOnly(ctx, pr, kept, prev.FileSummaries, prev.Findings)
+	out.Usage = usage
+	if err != nil {
+		return out, err
+	}
+	if d == nil {
+		out.Note = "the model found no flow to draw"
+		return out, nil
+	}
+	out.Diagram = d
+	if !post {
+		return out, nil
+	}
+	if state.SummaryID == "" {
+		return out, errors.New("no summary comment to add the diagram to")
+	}
+	prev.Diagram = d
+	st, _ := json.Marshal(prev)
+	body := review.ReplaceDiagram(state.SummaryBody, review.DiagramSection(d))
+	body = vcs.ReplaceStateTag(body, st)
+	if err := c.UpsertSummary(ctx, pr, state, body); err != nil {
+		return out, fmt.Errorf("post summary: %w", err)
 	}
 	return out, nil
 }

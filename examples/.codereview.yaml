@@ -32,6 +32,10 @@ path_filters:
 max_comments: 20
 # min_severity: minor     # critical | major | minor | nitpick
 poem: false
+# Flow diagram in the walkthrough: a sequence diagram of the flow this change
+# adds or alters. off (default), auto (when the change spans several layers:
+# 4+ source files in 2+ top-level folders, 3+ cohorts) or always.
+# diagram: auto
 
 auto_review:
   enabled: true

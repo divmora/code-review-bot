@@ -145,6 +145,12 @@ type Result struct {
 	// Verification reports the second-pass check of the findings.
 	Verification *Verification `json:"verification,omitempty"`
 	TooLarge     bool          `json:"too_large,omitempty"`
+	// Diagram is the flow diagram (issue #34; nil when none was drawn),
+	// DiagramNote why none was, and DiagramUsage its tokens (also counted
+	// in Usage).
+	Diagram      *Diagram      `json:"diagram,omitempty"`
+	DiagramNote  string        `json:"diagram_note,omitempty"`
+	DiagramUsage llm.Usage     `json:"diagram_usage"`
 	Model        string        `json:"model"`
 	Usage        llm.Usage     `json:"usage"`
 	Duration     time.Duration `json:"duration"`
@@ -201,6 +207,9 @@ type Input struct {
 	// PrevFindings are the previous review's open findings, with Changed
 	// set by the caller (nil when unknown: older summaries, --full).
 	PrevFindings []PrevFinding
+	// PrevDiagram is the previous review's flow diagram, kept by an
+	// incremental review whose changes don't touch it.
+	PrevDiagram *Diagram
 }
 
 // Engine runs reviews.
@@ -423,6 +432,10 @@ func (e *Engine) Run(ctx context.Context, in Input) (*Result, error) {
 	e.rankAndCap(res, in, kept)
 	e.reconcile(res, in)
 	e.walkthrough(ctx, res, in, files)
+	e.diagram(ctx, res, in)
+	res.Usage.InputTokens += res.DiagramUsage.InputTokens
+	res.Usage.OutputTokens += res.DiagramUsage.OutputTokens
+	res.Usage.CachedInputTokens += res.DiagramUsage.CachedInputTokens
 	res.open = res.openState(in.Files)
 	res.Duration = time.Since(start)
 	return res, nil

@@ -70,6 +70,8 @@ type State struct {
 	// Findings are the findings open at this review (counting towards the
 	// scores), so the next review can tell fixed ones from dismissed ones.
 	Findings []PrevFinding `json:"findings,omitempty"`
+	// Diagram is the flow diagram, kept for incremental reviews.
+	Diagram *Diagram `json:"diagram,omitempty"`
 }
 
 // summaryScoresRe reads the scores row of an older summary's table.
@@ -214,6 +216,7 @@ func SummaryMarkdown(res *Result, opts SummaryOptions) string {
 		}
 		b.WriteString("\n")
 	}
+	b.WriteString(DiagramSection(res.Diagram))
 	if res.DescriptionCheck != "" || (!res.TitleAccurate && res.SuggestedTitle != "") {
 		b.WriteString("## 📝 Description check\n\n")
 		if res.DescriptionCheck != "" {
@@ -345,7 +348,7 @@ func SummaryMarkdown(res *Result, opts SummaryOptions) string {
 	if res.HeadSHA != "" {
 		b.WriteString(vcs.ReviewedSHATag(res.HeadSHA) + "\n")
 	}
-	state := State{FileSummaries: res.FileSummaries, Findings: res.open}
+	state := State{FileSummaries: res.FileSummaries, Findings: res.open, Diagram: res.Diagram}
 	if res.Scores != nil {
 		state.Scores, state.ScoresSHA, state.OpenFindings = res.Scores, res.HeadSHA, OpenFindings(res.scoreFindings())
 	} else if c := res.carry; c != nil {
