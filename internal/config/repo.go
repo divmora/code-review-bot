@@ -40,6 +40,10 @@ type RepoConfig struct {
 	// Language of the review text, e.g. "English", "German".
 	Language string `yaml:"language"`
 	Poem     *bool  `yaml:"poem"`
+	// Diagram adds a sequence diagram of the changed flow to the
+	// walkthrough: off (default), auto (when the change spans several
+	// layers) or always.
+	Diagram string `yaml:"diagram"`
 
 	AutoReview AutoReview `yaml:"auto_review"`
 	// Guidelines controls reading AGENTS.md-style files from the target branch.
@@ -106,6 +110,9 @@ func (r *RepoConfig) fillDefaults() {
 	if r.Poem == nil {
 		r.Poem = boolPtr(false)
 	}
+	if r.Diagram == "" {
+		r.Diagram = "off"
+	}
 	if r.Guidelines.Enabled == nil {
 		r.Guidelines.Enabled = boolPtr(true)
 	}
@@ -161,6 +168,14 @@ func ParseRepoConfig(data []byte, defaults RepoConfig) (RepoConfig, error) {
 	}
 	if rc.Poem != nil {
 		out.Poem = rc.Poem
+	}
+	if rc.Diagram != "" {
+		switch d := strings.ToLower(strings.TrimSpace(rc.Diagram)); d {
+		case "off", "auto", "always":
+			out.Diagram = d
+		default:
+			return defaults, fmt.Errorf("parse repo config: diagram %q: want off, auto or always", rc.Diagram)
+		}
 	}
 	if rc.Model != "" {
 		out.Model = rc.Model
@@ -339,6 +354,9 @@ type Overrides struct {
 	AutoReview   *bool   `json:"auto_review,omitempty"`
 	Drafts       *bool   `json:"drafts,omitempty"`
 	Instructions string  `json:"instructions,omitempty"` // appended to repo instructions
+	// Diagram is the flow diagram mode: off, auto or always. "off" from
+	// the admin also refuses the "@bot diagram" command.
+	Diagram *string `json:"diagram,omitempty"`
 	// Learnings are added to the repository's own (e.g. from the console).
 	Learnings []Learning `json:"learnings,omitempty"`
 }
@@ -381,6 +399,13 @@ func (o *Overrides) Validate(profiles map[string]bool) error {
 	if o.Model != nil && *o.Model != "" && !profiles[*o.Model] {
 		return fmt.Errorf("model %q is not a model profile in the server config", *o.Model)
 	}
+	if o.Diagram != nil {
+		switch *o.Diagram {
+		case "off", "auto", "always":
+		default:
+			return fmt.Errorf("diagram %q: want off, auto or always", *o.Diagram)
+		}
+	}
 	if len(o.Instructions) > 8000 {
 		return fmt.Errorf("instructions are limited to 8000 characters")
 	}
@@ -417,6 +442,9 @@ func (o *Overrides) Apply(rc *RepoConfig) {
 	}
 	if o.Drafts != nil {
 		rc.AutoReview.Drafts = o.Drafts
+	}
+	if o.Diagram != nil {
+		rc.Diagram = *o.Diagram
 	}
 	if s := strings.TrimSpace(o.Instructions); s != "" {
 		rc.Instructions = strings.TrimSpace(rc.Instructions + "\n\n" + s)

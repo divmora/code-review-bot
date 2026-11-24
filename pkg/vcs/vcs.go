@@ -238,6 +238,16 @@ func StateTag(state []byte) string {
 
 var stateRe = regexp.MustCompile(`<!-- codereview:state=([A-Za-z0-9+/=]+) -->`)
 
+// ReplaceStateTag puts new state into a summary body, in place of the old
+// tag (or at the end).
+func ReplaceStateTag(body string, state []byte) string {
+	tag := StateTag(state)
+	if stateRe.MatchString(body) {
+		return stateRe.ReplaceAllLiteralString(body, tag)
+	}
+	return strings.TrimRight(body, "\n") + "\n" + tag + "\n"
+}
+
 // parseSummary fills summary fields of st from the bot's summary comment.
 func parseSummary(id, body string, st *BotState) {
 	st.SummaryID = id
