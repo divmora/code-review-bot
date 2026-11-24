@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/divmora/code-review-bot/compare/v0.6.1...v0.7.0) (2026-11-24)
+
+
+### Features
+
+* optional flow diagram of the changed flow in the walkthrough ([#36](https://github.com/divmora/code-review-bot/issues/36)) ([7c49ca9](https://github.com/divmora/code-review-bot/commit/7c49ca963c3e501c8afadbf3c546afaa7427b5b8)), closes [#34](https://github.com/divmora/code-review-bot/issues/34)
+
 ## [0.6.1](https://github.com/divmora/code-review-bot/compare/v0.6.0...v0.6.1) (2026-11-23)
 
 

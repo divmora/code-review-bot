@@ -61,11 +61,11 @@ Prebuilt binaries for Linux, macOS and Windows are on the [Releases](https://git
 <!-- x-release-please-start-version -->
 ```bash
 docker run --rm -e CODEREVIEW_MODEL -e ANTHROPIC_API_KEY -e GITHUB_TOKEN \
-  ghcr.io/divmora/code-review-bot:0.6.1 review https://github.com/org/repo/pull/123
+  ghcr.io/divmora/code-review-bot:0.7.0 review https://github.com/org/repo/pull/123
 
 # local changes: mount the repository at /workspace
 docker run --rm -v "$PWD:/workspace" -e CODEREVIEW_MODEL -e ANTHROPIC_API_KEY \
-  ghcr.io/divmora/code-review-bot:0.6.1 review --local
+  ghcr.io/divmora/code-review-bot:0.7.0 review --local
 ```
 <!-- x-release-please-end -->
 
@@ -125,7 +125,7 @@ Every response is also parsed leniently (fenced or prose-wrapped JSON), so weake
 
 <!-- x-release-please-start-version -->
 ```yaml
-- uses: divmora/code-review-bot@v0.6.1
+- uses: divmora/code-review-bot@v0.7.0
   with:
     model: anthropic:claude-sonnet-5-5
     fail-on: critical          # optional gate
