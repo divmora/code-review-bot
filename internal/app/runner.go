@@ -370,6 +370,11 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 		in.PrevFindings = r.previousFindings(ctx, c, pr, state)
 	}
 
+	prevLabels := labelState(state)
+	if m := rc.Labels.Mode; m == config.LabelsSuggest || m == config.LabelsApply {
+		in.Labels = r.labelInput(ctx, c, pr, rc, prevLabels)
+	}
+
 	model, err := r.LLM(rc.Model, opts.Overrides != nil && opts.Overrides.Model != nil && *opts.Overrides.Model != "")
 	if err != nil {
 		return nil, err
@@ -398,6 +403,10 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 		res.ConfigChanges = review.ConfigChanges(changed, r.Cfg.Review.RepoConfigFile, names)
 	}
 	out.Result = res
+	res.LabelState = prevLabels // labels off: keep what the bot set, for later
+	if in.Labels != nil {
+		r.applyLabels(ctx, c, pr, res, in.Labels, opts.Post)
+	}
 
 	if !opts.Post {
 		return out, nil
@@ -449,6 +458,66 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 		out.Approval, out.ApprovalReason = r.approve(ctx, c, pr, res, *opts.Approval, bot, sameHead)
 	}
 	return out, nil
+}
+
+// labelState is the label part of the last summary's state (nil without).
+func labelState(state *vcs.BotState) *review.LabelState {
+	var prev review.State
+	if state == nil || len(state.State) == 0 || json.Unmarshal(state.State, &prev) != nil {
+		return nil
+	}
+	return prev.Labels
+}
+
+// labelInput reads what label picking needs (issue #35): the labels the PR
+// may use, its current labels, and what the last review picked and set.
+// On Bitbucket (no PR labels) the candidates are the exact names in the
+// patterns, suggested only.
+func (r *Runner) labelInput(ctx context.Context, c vcs.Client, pr *vcs.PR, rc config.RepoConfig, prev *review.LabelState) *review.LabelInput {
+	li := &review.LabelInput{}
+	if prev != nil {
+		li.Prev, li.PrevSHA, li.BotAdded = prev.Picks, prev.SHA, prev.BotAdded
+	}
+	lab, ok := c.(vcs.Labeler)
+	if !ok || c.Platform() == vcs.Local {
+		li.Available = review.LiteralLabels(rc.Labels)
+		return li
+	}
+	avail, err := lab.AvailableLabels(ctx, pr)
+	if err != nil {
+		r.Logger.Warn("could not list the project's labels", "error", err)
+		return li
+	}
+	current, err := lab.PRLabels(ctx, pr)
+	if err != nil {
+		r.Logger.Warn("could not read the pull request's labels", "error", err)
+		return li
+	}
+	li.Available, li.Current, li.CanApply = avail, current, true
+	return li
+}
+
+// applyLabels sets the picked labels in apply mode (with post): adds the
+// ones the PR lacks and removes only the bot's own that no longer fit. A
+// failure (a token without the permission) is a warning. It records the
+// state the summary keeps.
+func (r *Runner) applyLabels(ctx context.Context, c vcs.Client, pr *vcs.PR, res *review.Result, li *review.LabelInput, post bool) {
+	if res.Labels == nil {
+		res.LabelState = &review.LabelState{BotAdded: li.BotAdded}
+		return
+	}
+	var added, removed []string
+	if add, remove := review.LabelChanges(res.Labels, li); post && len(add)+len(remove) > 0 {
+		if lab, ok := c.(vcs.Labeler); ok {
+			if err := lab.EditLabels(ctx, pr, add, remove); err != nil {
+				res.Errors = append(res.Errors, "labels: could not set them on the pull request: "+err.Error())
+			} else {
+				added, removed = add, remove
+				res.Labels.Applied, res.Labels.Removed = add, remove
+			}
+		}
+	}
+	res.LabelState = &review.LabelState{Picks: res.Labels.Suggested, SHA: pr.HeadSHA, BotAdded: review.BotLabelsAfter(li, added, removed)}
 }
 
 // DiagramOutcome is what a diagram-only run did.

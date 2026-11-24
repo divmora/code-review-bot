@@ -44,6 +44,8 @@ type RepoConfig struct {
 	// walkthrough: off (default), auto (when the change spans several
 	// layers) or always.
 	Diagram string `yaml:"diagram"`
+	// Labels picks the project's own labels for the PR (issue #35).
+	Labels Labels `yaml:"labels"`
 
 	AutoReview AutoReview `yaml:"auto_review"`
 	// Guidelines controls reading AGENTS.md-style files from the target branch.
@@ -64,6 +66,66 @@ type RepoConfig struct {
 	// Model picks one of the operator's named model profiles (only when
 	// the operator sets allow_repo_model).
 	Model string `yaml:"model"`
+}
+
+// Labels configures label suggestions: off (default), suggest (a line in
+// the walkthrough) or apply (also set on the PR). Only labels the project
+// already has and Allow matches are used; SuggestOnly ones are shown but
+// never set. Patterns are globs ("type::*") or exact names.
+type Labels struct {
+	Mode         string   `yaml:"mode" json:"mode,omitempty"`
+	Allow        []string `yaml:"allow" json:"allow,omitempty"`
+	SuggestOnly  []string `yaml:"suggest_only" json:"suggest_only,omitempty"`
+	Max          int      `yaml:"max" json:"max,omitempty"`
+	Instructions string   `yaml:"instructions" json:"instructions,omitempty"`
+}
+
+// Label modes.
+const (
+	LabelsOff     = "off"
+	LabelsSuggest = "suggest"
+	LabelsApply   = "apply"
+)
+
+// MaxLabels caps labels per PR.
+const MaxLabels = 10
+
+// validate checks a labels block (empty mode is fine: inherited).
+func (l Labels) validate() error {
+	switch l.Mode {
+	case "", LabelsOff, LabelsSuggest, LabelsApply:
+	default:
+		return fmt.Errorf("labels.mode %q: want off, suggest or apply", l.Mode)
+	}
+	if l.Max < 0 || l.Max > MaxLabels {
+		return fmt.Errorf("labels.max must be between 0 and %d", MaxLabels)
+	}
+	if len(l.Allow)+len(l.SuggestOnly) > 200 {
+		return fmt.Errorf("labels: at most 200 patterns")
+	}
+	if len(l.Instructions) > 4000 {
+		return fmt.Errorf("labels.instructions are limited to 4000 characters")
+	}
+	return nil
+}
+
+// merge writes the set fields of o over l.
+func (l *Labels) merge(o Labels) {
+	if o.Mode != "" {
+		l.Mode = strings.ToLower(strings.TrimSpace(o.Mode))
+	}
+	if o.Allow != nil {
+		l.Allow = o.Allow
+	}
+	if o.SuggestOnly != nil {
+		l.SuggestOnly = o.SuggestOnly
+	}
+	if o.Max > 0 {
+		l.Max = o.Max
+	}
+	if strings.TrimSpace(o.Instructions) != "" {
+		l.Instructions = strings.TrimSpace(o.Instructions)
+	}
 }
 
 // Guidelines configures repository guideline files.
@@ -112,6 +174,12 @@ func (r *RepoConfig) fillDefaults() {
 	}
 	if r.Diagram == "" {
 		r.Diagram = "off"
+	}
+	if r.Labels.Mode == "" {
+		r.Labels.Mode = LabelsOff
+	}
+	if r.Labels.Max <= 0 {
+		r.Labels.Max = 4
 	}
 	if r.Guidelines.Enabled == nil {
 		r.Guidelines.Enabled = boolPtr(true)
@@ -169,6 +237,11 @@ func ParseRepoConfig(data []byte, defaults RepoConfig) (RepoConfig, error) {
 	if rc.Poem != nil {
 		out.Poem = rc.Poem
 	}
+	rc.Labels.Mode = strings.ToLower(strings.TrimSpace(rc.Labels.Mode))
+	if err := rc.Labels.validate(); err != nil {
+		return defaults, fmt.Errorf("parse repo config: %w", err)
+	}
+	out.Labels.merge(rc.Labels)
 	if rc.Diagram != "" {
 		switch d := strings.ToLower(strings.TrimSpace(rc.Diagram)); d {
 		case "off", "auto", "always":
@@ -357,6 +430,9 @@ type Overrides struct {
 	// Diagram is the flow diagram mode: off, auto or always. "off" from
 	// the admin also refuses the "@bot diagram" command.
 	Diagram *string `json:"diagram,omitempty"`
+	// Labels are the label suggestion settings; set fields win over the
+	// repository's.
+	Labels *Labels `json:"labels,omitempty"`
 	// Learnings are added to the repository's own (e.g. from the console).
 	Learnings []Learning `json:"learnings,omitempty"`
 }
@@ -409,6 +485,11 @@ func (o *Overrides) Validate(profiles map[string]bool) error {
 	if len(o.Instructions) > 8000 {
 		return fmt.Errorf("instructions are limited to 8000 characters")
 	}
+	if o.Labels != nil {
+		if err := o.Labels.validate(); err != nil {
+			return err
+		}
+	}
 	if len(o.Learnings) > MaxLearnings {
 		return fmt.Errorf("at most %d learnings", MaxLearnings)
 	}
@@ -445,6 +526,9 @@ func (o *Overrides) Apply(rc *RepoConfig) {
 	}
 	if o.Diagram != nil {
 		rc.Diagram = *o.Diagram
+	}
+	if o.Labels != nil {
+		rc.Labels.merge(*o.Labels)
 	}
 	if s := strings.TrimSpace(o.Instructions); s != "" {
 		rc.Instructions = strings.TrimSpace(rc.Instructions + "\n\n" + s)

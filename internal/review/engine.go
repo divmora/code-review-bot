@@ -148,12 +148,19 @@ type Result struct {
 	// Diagram is the flow diagram (issue #34; nil when none was drawn),
 	// DiagramNote why none was, and DiagramUsage its tokens (also counted
 	// in Usage).
-	Diagram      *Diagram      `json:"diagram,omitempty"`
-	DiagramNote  string        `json:"diagram_note,omitempty"`
-	DiagramUsage llm.Usage     `json:"diagram_usage"`
-	Model        string        `json:"model"`
-	Usage        llm.Usage     `json:"usage"`
-	Duration     time.Duration `json:"duration"`
+	Diagram      *Diagram  `json:"diagram,omitempty"`
+	DiagramNote  string    `json:"diagram_note,omitempty"`
+	DiagramUsage llm.Usage `json:"diagram_usage"`
+	// Labels are the labels picked for the PR (issue #35; nil when off),
+	// and LabelsUsage their tokens (also counted in Usage).
+	Labels      *LabelResult `json:"labels,omitempty"`
+	LabelsUsage llm.Usage    `json:"labels_usage"`
+	// LabelState is what the summary keeps about labels (set by the runner
+	// once it has applied them).
+	LabelState *LabelState   `json:"-"`
+	Model      string        `json:"model"`
+	Usage      llm.Usage     `json:"usage"`
+	Duration   time.Duration `json:"duration"`
 
 	// carry are the previous review's scores, kept in the summary's state
 	// when this review gave none, so the next review still anchors to them.
@@ -210,6 +217,8 @@ type Input struct {
 	// PrevDiagram is the previous review's flow diagram, kept by an
 	// incremental review whose changes don't touch it.
 	PrevDiagram *Diagram
+	// Labels is what the runner read about labels (nil when off).
+	Labels *LabelInput
 }
 
 // Engine runs reviews.
@@ -433,9 +442,12 @@ func (e *Engine) Run(ctx context.Context, in Input) (*Result, error) {
 	e.reconcile(res, in)
 	e.walkthrough(ctx, res, in, files)
 	e.diagram(ctx, res, in)
-	res.Usage.InputTokens += res.DiagramUsage.InputTokens
-	res.Usage.OutputTokens += res.DiagramUsage.OutputTokens
-	res.Usage.CachedInputTokens += res.DiagramUsage.CachedInputTokens
+	e.labels(ctx, res, in)
+	for _, u := range []llm.Usage{res.DiagramUsage, res.LabelsUsage} {
+		res.Usage.InputTokens += u.InputTokens
+		res.Usage.OutputTokens += u.OutputTokens
+		res.Usage.CachedInputTokens += u.CachedInputTokens
+	}
 	res.open = res.openState(in.Files)
 	res.Duration = time.Since(start)
 	return res, nil
