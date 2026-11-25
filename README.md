@@ -160,7 +160,7 @@ The CLI is designed to be driven by schedulers such as Divmora Code Review Conso
 | Input | How |
 |---|---|
 | Which PR | the URL argument, or detected from GitHub Actions, GitLab CI or Bitbucket Pipelines variables |
-| Engine config | `--config codereview.yaml`, or the YAML itself in `CODEREVIEW_CONFIG_YAML` (model profiles, limits; reference keys with `api_key_env`) |
+| Engine config | `--config codereview.yaml`, or the YAML itself in `CODEREVIEW_CONFIG_YAML` (model profiles, limits; reference keys with `api_key_env`). Lookup order: `--config`, `$CODEREVIEW_CONFIG` (a path), `$CODEREVIEW_CONFIG_YAML`, then `./codereview.yaml`; a file in the working directory never replaces the env var. See [Configuration files and precedence](#configuration-files-and-precedence) |
 | Checking input | `codereview config validate [--format json]`: rejects unknown keys, unknown providers, unresolvable models and invalid `CODEREVIEW_OVERRIDES`, without calling a model. Exit `1` when invalid |
 | Secrets | environment only: provider keys, `GITHUB_TOKEN`, `GITLAB_TOKEN` |
 | Per-repo admin settings | `CODEREVIEW_OVERRIDES` JSON: `profile`, `max_comments`, `min_severity`, `model`, `auto_review`, `drafts`, `instructions`, `diagram`, `labels`, `learnings`. They win over the repository's `.codereview.yaml`; CLI flags win over them |

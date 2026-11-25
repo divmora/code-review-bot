@@ -113,7 +113,7 @@ type common struct {
 }
 
 func (c *common) register(fs *flag.FlagSet) {
-	fs.StringVar(&c.config, "config", "", "config file (default ./codereview.yaml or $CODEREVIEW_CONFIG)")
+	fs.StringVar(&c.config, "config", "", "config file (default $CODEREVIEW_CONFIG, then the YAML in $CODEREVIEW_CONFIG_YAML, then ./codereview.yaml)")
 	fs.StringVar(&c.model, "model", "", "model profile or provider:model (overrides config and CODEREVIEW_MODEL)")
 	fs.BoolVar(&c.verbose, "verbose", false, "debug logging")
 }
@@ -534,7 +534,7 @@ func cmdConfig(args []string) error {
 		return fmt.Errorf("usage: codereview config validate [--config FILE] [--format text|json]")
 	}
 	fs := flag.NewFlagSet("config validate", flag.ExitOnError)
-	path := fs.String("config", "", "config file (default ./codereview.yaml, $CODEREVIEW_CONFIG or $CODEREVIEW_CONFIG_YAML)")
+	path := fs.String("config", "", "config file (default $CODEREVIEW_CONFIG, then the YAML in $CODEREVIEW_CONFIG_YAML, then ./codereview.yaml)")
 	format := fs.String("format", "text", "output: text or json")
 	_ = fs.Parse(args[1:])
 
