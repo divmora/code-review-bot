@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuration reference — Code Review Bot</title>
+<meta name="description" content="Every Code Review Bot setting: the operator codereview.yaml, the repository .codereview.yaml, CODEREVIEW_OVERRIDES, environment variables, defaults and precedence.">
+<meta property="og:title" content="Code Review Bot configuration reference">
+<meta property="og:description" content="Every setting, its default, the file it belongs in, and which one wins.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://divmora.github.io/code-review-bot/configuration.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%237c6cff'/><path d='M10 12l-4 4 4 4M22 12l4 4-4 4M18 9l-4 14' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+</svg>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./"><span class="logo"><svg class="i"><use href="#i-code"/></svg></span>Code Review Bot</a>
+    <nav>
+      <a href="./#features" class="hide-sm">Features</a>
+      <a href="./#ci" class="hide-sm">CI/CD</a>
+      <a href="./#cli" class="hide-sm">CLI</a>
+      <a href="configuration.html" aria-current="page">Configuration</a>
+      <a href="https://github.com/divmora/code-review-bot" class="hide-xs">GitHub</a>
+    </nav>
+    <button class="theme" id="theme" title="Toggle light/dark" aria-label="Toggle light or dark theme"><svg class="i"><use href="#i-sun"/></svg></button>
+  </div>
+</header>
+
+<main id="top" class="ref">
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Reference</div>
+    <h1 class="ref-h1">Configuration</h1>
+    <p class="sub">Every setting, its default, the file it belongs in, and which one wins. All files are optional: with none, the bot runs on environment variables and the defaults below.</p>
+
+    <nav class="toc" aria-label="On this page">
+      <a href="#files">Two config files</a>
+      <a href="#lookup">Where the operator config comes from</a>
+      <a href="#precedence">Which setting wins</a>
+      <a href="#operator">Operator config</a>
+      <a href="#engine">Engine settings (<code>review:</code>)</a>
+      <a href="#repo">Review settings (<code>.codereview.yaml</code>)</a>
+      <a href="#overrides"><code>CODEREVIEW_OVERRIDES</code></a>
+      <a href="#env">Environment variables</a>
+    </nav>
+
+    <h2 id="files">Two config files</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th></th><th>Operator config: <code>codereview.yaml</code></th><th>Repository config: <code>.codereview.yaml</code></th></tr></thead>
+      <tbody>
+        <tr><td>Where</td><td>Wherever the bot runs (see <a href="#lookup">lookup order</a>)</td><td>Committed to the repository, read from the PR's <b>base</b> commit, so a PR can't change its own rules</td></tr>
+        <tr><td>Holds</td><td>Models and keys, code hosts, <a href="#engine">engine settings</a>, approvals, the command footer, and <code>review.defaults</code>: the review settings every repository starts from</td><td><a href="#repo">Review settings</a> only</td></tr>
+        <tr><td>Set by</td><td>Whoever runs the bot: you, a CI job, or Divmora Code Review Console</td><td>The repository's maintainers</td></tr>
+      </tbody>
+    </table></div>
+    <p class="hint"><code>${VAR}</code> in either file is replaced with the environment variable <code>VAR</code>. Keep keys and tokens in the environment, never in a file.</p>
+
+    <h2 id="lookup">Where the operator config comes from</h2>
+    <p>The first one found is used; the others are ignored:</p>
+    <ol class="steps">
+      <li><code>--config &lt;path&gt;</code></li>
+      <li><code>$CODEREVIEW_CONFIG</code>: a path</li>
+      <li><code>$CODEREVIEW_CONFIG_YAML</code>: the YAML itself. The console passes each job's config this way; in CI it can live in one protected variable.</li>
+      <li><code>./codereview.yaml</code> or <code>./codereview.yml</code> in the working directory, for local use</li>
+    </ol>
+    <p class="hint">The environment variable comes before the file in the working directory: in GitLab CI and Bitbucket Pipelines that directory is the PR's checkout, and a <code>codereview.yaml</code> added by a PR must not replace the operator's config. Run <code>codereview config validate</code> to see which source was used and whether it is valid.</p>
+
+    <h2 id="precedence">Which setting wins</h2>
+    <p>A review setting is resolved from lowest to highest:</p>
+    <ol class="steps">
+      <li>built-in defaults</li>
+      <li><code>review.defaults</code> in the operator config</li>
+      <li>the repository's <code>.codereview.yaml</code></li>
+      <li><code>CODEREVIEW_OVERRIDES</code> (per-repository settings from the console)</li>
+      <li>CLI flags, including turning things off: <code>--approve=false</code>, <code>--score-labels=false</code>, <code>--fail-on none</code></li>
+    </ol>
+    <p>The operator keeps control of a few things:</p>
+    <ul class="plain">
+      <li><code>review.approve</code> and <code>review.commands</code> are operator-only. In <code>.codereview.yaml</code> they are ignored, with a warning in the log.</li>
+      <li>A repository's <code>fail_on</code> can set one where the operator has none, and otherwise only make it stricter.</li>
+      <li>A repository's <code>model</code> is used only with <code>allow_repo_model: true</code>, and only names one of the operator's profiles.</li>
+      <li><code>instructions</code>, <code>path_instructions</code>, <code>path_filters</code> and <code>learnings</code> add up across levels instead of replacing each other.</li>
+    </ul>
+
+    <h2 id="operator">Operator config</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>model</code></td><td>the only profile, if there is one</td><td>Active model: a profile name from <code>models</code> or a <code>provider:model</code> spec. <code>--model</code> and <code>CODEREVIEW_MODEL</code> win over it.</td></tr>
+        <tr><td><code>fallback</code></td><td><code>[]</code></td><td>Models tried in order when the active one fails after its retries. <code>CODEREVIEW_FALLBACK</code> (comma-separated) wins.</td></tr>
+        <tr><td><code>models.&lt;name&gt;</code></td><td></td><td>Named model profiles, with the keys below.</td></tr>
+        <tr><td><code>allow_repo_model</code></td><td><code>false</code></td><td>Let <code>.codereview.yaml</code> pick one of the profiles with <code>model:</code>. Specs from a repository are never used.</td></tr>
+        <tr><td><code>bot_name</code></td><td>the token's user, else <code>codereview</code></td><td>Handle in placeholders and the command footer (<code>@&lt;bot_name&gt; review</code>). Set it for a GitHub App (its slug) or tokens with no user.</td></tr>
+        <tr><td><code>review</code></td><td></td><td><a href="#engine">Engine settings</a>, approvals and <code>review.defaults</code>.</td></tr>
+        <tr><td><code>github.api_url</code></td><td><code>$GITHUB_API_URL</code>, else <code>https://api.github.com</code></td><td>GitHub Enterprise Server: <code>https://&lt;host&gt;/api/v3</code>. <code>GITHUB_TOKEN</code> is sent only here.</td></tr>
+        <tr><td><code>github.token</code></td><td><code>$GITHUB_TOKEN</code></td><td>A token that can read the PR and post comments.</td></tr>
+        <tr><td><code>github.app_id</code>, <code>private_key_file</code>, <code>private_key</code></td><td></td><td>Use a GitHub App instead of a token.</td></tr>
+        <tr><td><code>github.host</code></td><td>from <code>api_url</code></td><td>PR URL host when it differs from the API host.</td></tr>
+        <tr><td><code>gitlab[]</code></td><td>one instance from <code>GITLAB_URL</code> / <code>CI_SERVER_URL</code></td><td>One entry per GitLab instance: <code>base_url</code>, <code>token</code>, <code>host</code>, <code>skip_tls_verify</code> (last resort for private CAs).</td></tr>
+        <tr><td><code>bitbucket</code></td><td><code>https://api.bitbucket.org/2.0</code></td><td>Bitbucket Cloud: <code>token</code> (access token), or <code>email</code> + <code>api_token</code>; <code>api_url</code>.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Model profile keys</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>provider</code></td><td>required</td><td><code>openai</code>, <code>anthropic</code>, <code>gemini</code>, <code>bedrock</code>, <code>azure</code>, <code>ollama</code>, <code>openrouter</code>, <code>groq</code>, <code>deepseek</code>, <code>mistral</code>, <code>xai</code>, <code>together</code>, <code>litellm</code>, <code>openai-compatible</code></td></tr>
+        <tr><td><code>model</code></td><td>required</td><td>The provider's model or deployment ID.</td></tr>
+        <tr><td><code>api_key</code> / <code>api_key_env</code></td><td>the provider's usual variable</td><td>A key as <code>${VAR}</code>, or the name of the variable holding it.</td></tr>
+        <tr><td><code>base_url</code></td><td>the provider's</td><td>For Azure, gateways and OpenAI-compatible servers.</td></tr>
+        <tr><td><code>headers</code></td><td></td><td>Extra HTTP headers, e.g. for a gateway.</td></tr>
+        <tr><td><code>region</code>, <code>aws_profile</code></td><td>AWS default chain</td><td>Bedrock only.</td></tr>
+        <tr><td><code>max_tokens</code></td><td><code>8192</code></td><td>Output token limit per call.</td></tr>
+        <tr><td><code>temperature</code></td><td>the provider's</td><td>Sampling temperature.</td></tr>
+        <tr><td><code>timeout</code></td><td><code>5m</code></td><td>Per call.</td></tr>
+        <tr><td><code>max_retries</code></td><td><code>3</code></td><td>Retries with backoff; <code>-1</code> for none.</td></tr>
+        <tr><td><code>structured_output</code></td><td>by provider</td><td><code>json_schema</code>, <code>json_object</code> or <code>prompt</code>.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2 id="engine">Engine settings (<code>review:</code>)</h2>
+    <p>Operator config only.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>concurrency</code></td><td><code>4</code></td><td>Parallel model calls per review.</td></tr>
+        <tr><td><code>batch_tokens</code></td><td><code>40000</code></td><td>Estimated prompt tokens per call.</td></tr>
+        <tr><td><code>max_files</code></td><td><code>150</code></td><td>PRs with more reviewable files are skipped.</td></tr>
+        <tr><td><code>full_file_max_lines</code></td><td><code>800</code></td><td>Files up to this size are sent whole for context.</td></tr>
+        <tr><td><code>context_lines</code></td><td><code>60</code></td><td>Larger files: lines sent around each change.</td></tr>
+        <tr><td><code>verify</code></td><td><code>true</code></td><td>Second, skeptical pass over the findings (one extra call).</td></tr>
+        <tr><td><code>verify_model</code></td><td>the review model</td><td>Model for that pass; <code>--verify-model</code> wins.</td></tr>
+        <tr><td><code>verify_can_drop</code></td><td><code>confident</code></td><td><code>confident</code>, <code>minor</code> or <code>all</code>: what the verifier may remove.</td></tr>
+        <tr><td><code>verify_can_add</code></td><td><code>false</code></td><td>Let the verifier add findings it thinks were missed (unverified).</td></tr>
+        <tr><td><code>passes</code></td><td><code>1</code></td><td>Review each batch 1–3 times and merge the findings.</td></tr>
+        <tr><td><code>anchor_scores</code></td><td><code>true</code></td><td>Start scores from the previous review's; <code>--full</code> rescores.</td></tr>
+        <tr><td><code>repo_config_file</code></td><td><code>.codereview.yaml</code></td><td>Path of the repository config, read from the base commit.</td></tr>
+        <tr><td><code>approve.enabled</code></td><td><code>false</code></td><td>Approve PRs that pass, with <code>--post</code>. <code>--approve</code> turns it on, <code>--approve=false</code> off, for one run.</td></tr>
+        <tr><td><code>approve.block</code></td><td><code>major</code></td><td>Lowest severity that blocks approval: <code>critical</code>, <code>major</code>, <code>minor</code>, <code>nitpick</code> or <code>none</code>.</td></tr>
+        <tr><td><code>approve.min_score</code></td><td><code>0</code></td><td>Also need every score at least this high (1–100); <code>0</code> ignores scores.</td></tr>
+        <tr><td><code>approve.withdraw</code></td><td><code>true</code></td><td>Withdraw the bot's earlier approval when a later review doesn't pass.</td></tr>
+        <tr><td><code>commands</code></td><td><code>false</code></td><td>List the <code>@bot</code> chat commands in the summary footer. Only when a webhook service (the console) answers them.</td></tr>
+        <tr><td><code>defaults</code></td><td></td><td>Any <a href="#repo">review setting</a>: the starting point for every repository.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2 id="repo">Review settings (<code>.codereview.yaml</code>)</h2>
+    <p>These go in a repository's <code>.codereview.yaml</code> or under <code>review.defaults</code> in the operator config.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Key</th><th>Default</th><th>Flag</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>profile</code></td><td><code>balanced</code></td><td><code>--profile</code></td><td><code>chill</code>, <code>balanced</code> or <code>assertive</code>.</td></tr>
+        <tr><td><code>max_comments</code></td><td><code>25</code></td><td><code>--max-comments</code></td><td>Inline comment limit; the rest go in the summary.</td></tr>
+        <tr><td><code>min_severity</code></td><td>by profile</td><td><code>--min-severity</code></td><td>Drop findings below <code>critical</code>, <code>major</code>, <code>minor</code> or <code>nitpick</code>.</td></tr>
+        <tr><td><code>language</code></td><td><code>English</code></td><td></td><td>Language of the review text.</td></tr>
+        <tr><td><code>poem</code></td><td><code>false</code></td><td></td><td>A short poem in the summary.</td></tr>
+        <tr><td><code>instructions</code></td><td></td><td></td><td>Guidance for the whole review. Adds to the operator's.</td></tr>
+        <tr><td><code>path_instructions</code></td><td></td><td></td><td>List of <code>{path, instructions}</code> for matching files.</td></tr>
+        <tr><td><code>path_filters</code></td><td></td><td></td><td>Globs to include; <code>!glob</code> excludes. Lockfiles, generated, vendored and binary files are always skipped.</td></tr>
+        <tr><td><code>learnings</code></td><td></td><td></td><td>List of <code>{text, path}</code>: team decisions the reviewer follows (at most 100).</td></tr>
+        <tr><td><code>guidelines.enabled</code></td><td><code>true</code></td><td></td><td>Read guideline files from the target branch.</td></tr>
+        <tr><td><code>guidelines.files</code></td><td><code>AGENTS.md</code>, <code>CLAUDE.md</code>, <code>.github/copilot-instructions.md</code>, <code>.cursorrules</code></td><td></td><td>Files at the repository root; nested <code>AGENTS.md</code> files are always included.</td></tr>
+        <tr><td><code>diagram</code></td><td><code>off</code></td><td><code>--diagram</code></td><td>Flow diagram in the walkthrough: <code>off</code>, <code>auto</code> (when a change spans layers) or <code>always</code>.</td></tr>
+        <tr><td><code>labels.mode</code></td><td><code>off</code></td><td><code>--labels</code></td><td><code>off</code>, <code>suggest</code> (a line in the walkthrough) or <code>apply</code> (also set them).</td></tr>
+        <tr><td><code>labels.allow</code></td><td></td><td></td><td>Patterns of the project's labels that may be used, e.g. <code>type::*</code>.</td></tr>
+        <tr><td><code>labels.suggest_only</code></td><td></td><td></td><td>Shown, never set, even in <code>apply</code> mode.</td></tr>
+        <tr><td><code>labels.max</code></td><td><code>4</code></td><td></td><td>Labels per PR, at most 10.</td></tr>
+        <tr><td><code>labels.instructions</code></td><td></td><td></td><td>How to choose labels.</td></tr>
+        <tr><td><code>auto_review.enabled</code></td><td><code>true</code></td><td><code>--auto</code> applies these</td><td>Review on pushes.</td></tr>
+        <tr><td><code>auto_review.drafts</code></td><td><code>false</code></td><td></td><td>Review draft PRs.</td></tr>
+        <tr><td><code>auto_review.incremental</code></td><td><code>true</code></td><td></td><td>On new pushes, review only what changed.</td></tr>
+        <tr><td><code>auto_review.base_branches</code></td><td>any</td><td></td><td>Only PRs into matching branches.</td></tr>
+        <tr><td><code>auto_review.ignore_title_keywords</code></td><td><code>[skip review]</code>, <code>[no review]</code>, <code>WIP</code></td><td></td><td>Skip PRs whose title contains one.</td></tr>
+        <tr><td><code>high_level_summary</code></td><td><code>true</code></td><td></td><td>Append a "Summary by codereview" block to the description.</td></tr>
+        <tr><td><code>high_level_summary_placeholder</code></td><td><code>@codereview summary</code></td><td></td><td>Where the block goes; works even when the summary is off.</td></tr>
+        <tr><td><code>high_level_summary_instructions</code></td><td></td><td></td><td>How to write the summary.</td></tr>
+        <tr><td><code>auto_title_placeholder</code></td><td><code>@codereview</code></td><td></td><td>Put it in the title to get a generated one.</td></tr>
+        <tr><td><code>auto_title_instructions</code></td><td></td><td></td><td>How to write the title.</td></tr>
+        <tr><td><code>score_labels</code></td><td><code>false</code></td><td><code>--score-labels</code></td><td>Set Quality, Security and Maintainability score labels (with <code>--post</code>).</td></tr>
+        <tr><td><code>commit_status</code></td><td><code>false</code></td><td><code>--commit-status</code></td><td>Set a <code>codereview</code> status on the commit (with <code>--post</code>).</td></tr>
+        <tr><td><code>fail_on</code></td><td>none</td><td><code>--fail-on</code></td><td>Exit 3 at this severity or above. A repository can only make the operator's stricter.</td></tr>
+        <tr><td><code>model</code></td><td></td><td></td><td>One of the operator's profiles; used only with <code>allow_repo_model</code>.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2 id="overrides"><code>CODEREVIEW_OVERRIDES</code></h2>
+    <p>Per-repository settings as JSON, set by Divmora Code Review Console. They win over the repository's file; CLI flags win over them. Unknown keys are rejected.</p>
+    <div class="codeblock"><div class="ttl">CODEREVIEW_OVERRIDES</div><pre>{"profile": "assertive", "max_comments": 30, "min_severity": "minor",
+ "model": "claude", "auto_review": true, "drafts": false,
+ "instructions": "added to the repository's",
+ "diagram": "auto",
+ "labels": {"mode": "suggest", "allow": ["type::*"]},
+ "learnings": [{"text": "...", "path": "api/**"}]}</pre></div>
+
+    <h2 id="env">Environment variables</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Variable</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>CODEREVIEW_MODEL</code>, <code>CODEREVIEW_FALLBACK</code></td><td>Active model and fallbacks; win over the config.</td></tr>
+        <tr><td><code>CODEREVIEW_CONFIG</code>, <code>CODEREVIEW_CONFIG_YAML</code></td><td>Operator config as a path, or the YAML itself (<a href="#lookup">lookup order</a>).</td></tr>
+        <tr><td><code>CODEREVIEW_OVERRIDES</code></td><td><a href="#overrides">Per-repository settings</a> as JSON.</td></tr>
+        <tr><td><code>CODEREVIEW_STATE_KEY</code></td><td>A long random secret, the same on every run: the bot signs what it posts and still recognises its own comments after the token changes user.</td></tr>
+        <tr><td><code>GITHUB_TOKEN</code>, <code>GITHUB_API_URL</code></td><td>GitHub token and API base; the token is sent only to that host.</td></tr>
+        <tr><td><code>GITLAB_TOKEN</code>, <code>GITLAB_URL</code> / <code>CI_SERVER_URL</code></td><td>GitLab token (<code>api</code> scope) and instance; the token is sent only to that host.</td></tr>
+        <tr><td><code>BITBUCKET_TOKEN</code>, or <code>BITBUCKET_EMAIL</code> + <code>BITBUCKET_API_TOKEN</code></td><td>Bitbucket Cloud credentials.</td></tr>
+        <tr><td><code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, <code>GEMINI_API_KEY</code>, …</td><td>Provider keys, read automatically for their provider. Bedrock uses the AWS credential chain.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="hint">Full examples: <a href="https://github.com/divmora/code-review-bot/blob/main/examples/codereview.yaml">examples/codereview.yaml</a> (operator) and <a href="https://github.com/divmora/code-review-bot/blob/main/examples/.codereview.yaml">examples/.codereview.yaml</a> (repository).</p>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Code Review Bot by <a href="https://divmora.com">DIVMORA Technologies</a> · Apache License 2.0</span>
+    <span><a href="./">Home</a> · <a href="https://github.com/divmora/code-review-bot">GitHub</a> · <a href="https://github.com/divmora/code-review-bot/releases">Releases</a> · <a href="https://github.com/divmora/code-review-bot/blob/main/SECURITY.md">Security</a></span>
+  </div>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>

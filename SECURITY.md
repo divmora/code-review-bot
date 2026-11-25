@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes go into the latest minor release (currently **0.6.x**). Upgrade to it to get them; older releases are not patched.
+Security fixes go into the latest minor release ([see Releases](https://github.com/divmora/code-review-bot/releases/latest)). Upgrade to it to get them; older releases are not patched.
 
 ## Published advisories
 
@@ -32,7 +32,7 @@ Include a description, impact, reproduction steps and any suggested fix. We ackn
   - GitHub token in Actions: `contents: read`, `pull-requests: write`.
   - GitLab: a dedicated bot user or project/group access token with `api` scope, Developer role.
   - Bitbucket Cloud: a repository access token with Pull requests: Write and Repositories: Read (add Pipelines/build status write for `--commit-status`).
-- **Untrusted PRs**: PR content is passed to the model as data, and repo review rules are read from the base commit. Treat model output as advisory: the CLI comments, and never merges or pushes. It approves only when you pass `--approve` (0.5.0 and later), under the rule you set in `review.approve` (`block`, `min_score`). Don't let the bot's approval alone satisfy required approvals on sensitive branches, and give its token no more rights than approving needs.
+- **Untrusted PRs**: PR content is passed to the model as data, and repo review rules are read from the base commit. Treat model output as advisory: the CLI comments, and never merges or pushes. It approves only when you pass `--approve` or set `review.approve.enabled` in the operator config, under the rule in `review.approve` (`block`, `min_score`); a repository's `.codereview.yaml` can't turn approvals on. Don't let the bot's approval alone satisfy required approvals on sensitive branches, and give its token no more rights than approving needs.
 - **State key**: set `CODEREVIEW_STATE_KEY` (a long random secret, the same on every run; the console sets one per code host) so the bot signs what it posts and still recognises its own comments after the token changes to another user. Without it, only the token user's comments count.
 - **Tokens stay on their host**: `GITLAB_TOKEN` is sent only to `GITLAB_URL`, `CI_SERVER_URL` or gitlab.com and `GITHUB_TOKEN` only to `GITHUB_API_URL`; configure every other host explicitly.
 - **Forks**: don't expose provider keys to workflows triggered by forked PRs (`pull_request_target` with checkout of fork code is unsafe). The example workflow skips forks.

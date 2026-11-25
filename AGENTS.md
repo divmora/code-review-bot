@@ -6,7 +6,7 @@ Guidance for AI coding agents and contributors. Org-wide rules live in
 ## Layout
 
 ```
-cmd/codereview/   CLI: review (one PR per run), ask, models, ping, config validate, version
+cmd/codereview/   CLI: review (one PR per run), ask, learn, models, ping, config validate, version
 pkg/diff/         unified diff parser, commentable-line logic, annotated rendering
 pkg/vcs/          code hosts: GitHub (token or App), GitLab, Bitbucket Cloud, local git; bot-state
                   markers (Bitbucket gets them as Markdown link references: no HTML there)
@@ -22,7 +22,7 @@ action.yml        GitHub Action (composite; installs the CLI at the action ref)
 
 The CLI contract is the interface for other programs: flags, `CODEREVIEW_CONFIG_YAML`,
 `CODEREVIEW_OVERRIDES`, JSON output, `config validate` and exit codes (see README). Keep it
-stable. Divmora Code Review Console (BSL, separate repo) builds config YAML itself and runs this
+stable. Divmora Code Review Console (Elastic License 2.0, separate repo) builds config YAML itself and runs this
 CLI through executors; the only Go packages it imports are `pkg/vcs` (and `pkg/diff` through it),
 so those are the only public packages. Keep them backward compatible; everything else is
 `internal/` and free to change.
@@ -52,12 +52,10 @@ databases belong in the console. Don't add a long-running server here.
   touching an added line (pure-deletion hunks excepted). Never relax this without a profile switch.
 - **PR content is untrusted**: prompts say so. Never let repo config choose arbitrary model
   endpoints; `allow_repo_model` only selects operator-defined profiles.
-
-
-
-
-
-
+- **Operator-only settings**: `review.approve` and `review.commands` come from the operator config
+  only; a repository's `.codereview.yaml` can't set them, and its `fail_on` can only be stricter.
+- **Flags win**: precedence is built-in defaults < `review.defaults` < `.codereview.yaml` <
+  `CODEREVIEW_OVERRIDES` < CLI flags (`Runner.RepoConfig` applies them in that order).
 - **Provider parity**: each provider supports `Request.Schema`. Add a test with an `httptest`
   server for every provider change. Retries live in `llm.WithRetry`, not in providers (Bedrock
   SDK retries are disabled on purpose).
