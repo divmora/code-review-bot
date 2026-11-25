@@ -4,6 +4,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"regexp"
 	"strings"
@@ -157,9 +158,13 @@ func Load(path string) (*Config, error) {
 // Kubernetes Jobs) use it instead of a file.
 const InlineEnv = "CODEREVIEW_CONFIG_YAML"
 
-// Source returns the raw config Load reads and where it came from: path,
-// $CODEREVIEW_CONFIG, ./codereview.yaml, then $CODEREVIEW_CONFIG_YAML. No
-// config at all returns empty data and no error.
+// Source returns the raw config Load reads and where it came from, the
+// first of: path (--config), $CODEREVIEW_CONFIG (a path),
+// $CODEREVIEW_CONFIG_YAML (the YAML itself), then ./codereview.yaml or
+// ./codereview.yml. The explicit sources come first: in CI the working
+// directory can be the PR's checkout, whose codereview.yaml must not
+// replace the operator's config (issue #49). No config at all returns
+// empty data and no error.
 func Source(path string) (string, []byte, error) {
 	explicit := path != ""
 	if path == "" {
@@ -167,18 +172,15 @@ func Source(path string) (string, []byte, error) {
 		explicit = path != ""
 	}
 	if path == "" {
-		for _, p := range []string{"codereview.yaml", "codereview.yml"} {
-			if _, err := os.Stat(p); err == nil {
-				path = p
-				break
-			}
-		}
-	}
-	if path == "" {
 		if v := os.Getenv(InlineEnv); v != "" {
+			if f := cwdConfig(); f != "" {
+				slog.Debug("using the config in "+InlineEnv+", not the file in the working directory", "skipped", f)
+			}
 			return InlineEnv, []byte(v), nil
 		}
-		return "", nil, nil
+		if path = cwdConfig(); path == "" {
+			return "", nil, nil
+		}
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -188,6 +190,16 @@ func Source(path string) (string, []byte, error) {
 		return "", nil, nil
 	}
 	return path, data, nil
+}
+
+// cwdConfig is ./codereview.yaml or ./codereview.yml when one exists.
+func cwdConfig() string {
+	for _, p := range []string{"codereview.yaml", "codereview.yml"} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
 }
 
 func sourceLabel(name string) string {

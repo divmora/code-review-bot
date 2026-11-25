@@ -146,3 +146,40 @@ func TestInlineConfigEnv(t *testing.T) {
 		t.Errorf("inline config not applied: %+v", cfg)
 	}
 }
+
+// Lookup order: --config, $CODEREVIEW_CONFIG, $CODEREVIEW_CONFIG_YAML, then
+// ./codereview.yaml (issue #49).
+func TestSourceOrder(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	write("codereview.yaml", "model: cwd\n")
+	explicit := write("explicit.yaml", "model: explicit\n")
+	t.Chdir(dir)
+	t.Setenv("CODEREVIEW_CONFIG", "")
+	t.Setenv("CODEREVIEW_CONFIG_YAML", "")
+
+	check := func(flag, want string) {
+		t.Helper()
+		name, data, err := Source(flag)
+		if err != nil || string(data) != "model: "+want+"\n" {
+			t.Errorf("want %s, got %s (%q) %v", want, name, data, err)
+		}
+	}
+	check("", "cwd") // the fallback when nothing is set
+
+	t.Setenv("CODEREVIEW_CONFIG_YAML", "model: inline\n")
+	check("", "inline") // the env var beats the file in the working directory
+
+	t.Setenv("CODEREVIEW_CONFIG", explicit)
+	check("", "explicit") // a path in $CODEREVIEW_CONFIG beats the inline YAML
+
+	t.Setenv("CODEREVIEW_CONFIG", "")
+	check(explicit, "explicit") // and so does --config
+}
