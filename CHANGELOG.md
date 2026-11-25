@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/divmora/code-review-bot/compare/v0.7.0...v0.8.0) (2026-11-24)
+
+
+### Features
+
+* suggest or apply the project's own labels on pull requests ([#38](https://github.com/divmora/code-review-bot/issues/38)) ([12e848a](https://github.com/divmora/code-review-bot/commit/12e848a443531b18ba75a56698f6daaeecc6a04a)), closes [#35](https://github.com/divmora/code-review-bot/issues/35)
+
 ## [0.7.0](https://github.com/divmora/code-review-bot/compare/v0.6.1...v0.7.0) (2026-11-24)
 
 
