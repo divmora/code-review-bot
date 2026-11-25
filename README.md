@@ -168,6 +168,8 @@ The CLI is designed to be driven by schedulers such as Divmora Code Review Conso
 | Logs | stderr |
 | Exit code | `0` success, `1` error, `3` a finding met `--fail-on` (or the config's `fail_on`) |
 
+The summary footer lists the `@bot` chat commands (`@bot review`, `@bot full review`, `@bot help`, `@bot <question>`) only with `review.commands: true` in the operator config. Set it when a webhook service such as the console answers them; the CLI runs once and can't. A repository's `.codereview.yaml` can't set it. Before 0.9 this was the `--commands` flag, which is removed.
+
 ## Scores and verification
 
 Every review rates the change from **1 to 100** on **Quality**, **Security** and **Maintainability**. The scores appear in the summary, the CLI output and the JSON result. They're capped by the findings: a critical security finding caps Security at 40, a major one at 70.
@@ -341,7 +343,7 @@ Set it in `.codereview.yaml` or with `--profile`. The profile also sets the defa
 
 | Command | Purpose |
 |---|---|
-| `review [URL]` | Review one PR/MR. Flags: `--local`, `--dir`, `--base`, `--post`, `--full`, `--auto`, `--format text\|markdown\|json\|sarif`, `--output`, `--fail-on`, `--profile`, `--max-comments`, `--min-severity`, `--commands`, `--score-labels`, `--commit-status`, `--approve`, `--verify-model`, `--diagram`, `--labels`, `--diagram-only` |
+| `review [URL]` | Review one PR/MR. Flags: `--local`, `--dir`, `--base`, `--post`, `--full`, `--auto`, `--format text\|markdown\|json\|sarif`, `--output`, `--fail-on`, `--profile`, `--max-comments`, `--min-severity`, `--score-labels`, `--commit-status`, `--approve`, `--verify-model`, `--diagram`, `--labels`, `--diagram-only` |
 | `ask URL "question"` | Answer a question about a PR (`--post` to reply on it) |
 | `models` | List providers, profiles and the active chain |
 | `ping` | Test each model in the chain |

@@ -71,6 +71,7 @@ review:
   verify_can_add: false     # let the verifier add findings it thinks were missed (unverified; off by default)
   # anchor_scores: true     # start scores from the previous review's, so they move only when the change does (--full rescores)
   repo_config_file: .codereview.yaml
+  # commands: true          # list @bot chat commands in the summary footer; only when a webhook service (the console) answers them
   # The approval rule (with --post). enabled approves without --approve;
   # --approve=false turns it off for one run. Operator config only:
   # .codereview.yaml can't set it.

@@ -500,9 +500,10 @@ func TestBotNameFromToken(t *testing.T) {
 	defer srv.Close()
 	r := newRunner(t, llmSrv.URL)
 	r.Cfg.BotName = ""
+	r.Cfg.Review.Commands = true
 	client := vcs.NewGitHub(srv.URL, vcs.StaticToken("t"))
 	ref := vcs.Ref{Platform: vcs.GitHub, Host: "github.com", Repo: "o/r", Number: 7}
-	if _, err := r.Review(context.Background(), client, ref, Options{Post: true, Commands: true}); err != nil {
+	if _, err := r.Review(context.Background(), client, ref, Options{Post: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(gh.summary, "`@review-bot review`") || strings.Contains(gh.summary, "@codereview") {
@@ -511,5 +512,22 @@ func TestBotNameFromToken(t *testing.T) {
 	r.Cfg.BotName = "acme-review"
 	if got := r.botName(context.Background(), client, "github.com"); got != "acme-review" {
 		t.Errorf("an explicit bot_name wins: %s", got)
+	}
+}
+
+// Without review.commands the footer doesn't advertise commands nobody
+// answers (issue #47).
+func TestCommandsFooterOffByDefault(t *testing.T) {
+	llmSrv, _ := fakeLLM(t, `{"files":[{"path":"app.go","summary":"x"}],"comments":[]}`)
+	gh := &fakeGitHub{head: "head1"}
+	srv := httptest.NewServer(gh.handler(t))
+	defer srv.Close()
+	r := newRunner(t, llmSrv.URL)
+	ref := vcs.Ref{Platform: vcs.GitHub, Host: "github.com", Repo: "o/r", Number: 7}
+	if _, err := r.Review(context.Background(), vcs.NewGitHub(srv.URL, vcs.StaticToken("t")), ref, Options{Post: true}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(gh.summary, "Commands:") || !strings.Contains(gh.summary, "Reviewed by code-review-bot") {
+		t.Errorf("footer without review.commands: %s", gh.summary)
 	}
 }

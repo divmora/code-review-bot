@@ -284,6 +284,9 @@ func ParseRepoConfig(data []byte, defaults RepoConfig) (RepoConfig, error) {
 	if hasKey(data, "approve") {
 		out.Ignored = append(out.Ignored, "approve: approvals are set in the operator config (review.approve) or with --approve, not in the repository")
 	}
+	if hasKey(data, "commands") {
+		out.Ignored = append(out.Ignored, "commands: the @bot command footer is set in the operator config (review.commands), not in the repository")
+	}
 	if rc.HighLevelSummary != nil {
 		out.HighLevelSummary = rc.HighLevelSummary
 	}

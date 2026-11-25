@@ -59,3 +59,21 @@ func TestCheckPolicy(t *testing.T) {
 		}
 	}
 }
+
+// review.commands is a deployment setting: operator config only (issue #47).
+func TestCommandsSetting(t *testing.T) {
+	cfg, err := Strict("t", []byte("model: openai:m\nreview:\n  commands: true\n"))
+	if err != nil || !cfg.Review.Commands {
+		t.Fatalf("review.commands: %v %v", cfg.Review.Commands, err)
+	}
+	if cfg, _ := Strict("t", []byte("model: openai:m\n")); cfg.Review.Commands {
+		t.Error("commands should be off by default")
+	}
+	rc, err := ParseRepoConfig([]byte("commands: true\n"), RepoConfig{Profile: Balanced})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rc.Ignored) != 1 || !strings.Contains(rc.Ignored[0], "review.commands") {
+		t.Errorf("commands in the repository: ignored = %v", rc.Ignored)
+	}
+}
