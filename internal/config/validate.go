@@ -84,5 +84,9 @@ func (c *Config) Check() error {
 	default:
 		errs = append(errs, fmt.Errorf("review.defaults.profile %q: want chill, balanced or assertive", c.Review.Defaults.Profile))
 	}
+	if err := CheckSeverity("review.defaults.fail_on", c.Review.Defaults.FailOn); err != nil {
+		errs = append(errs, err)
+	}
+	errs = append(errs, c.Review.Approve.check()...)
 	return errors.Join(errs...)
 }

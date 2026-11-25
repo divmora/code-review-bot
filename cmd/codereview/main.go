@@ -175,16 +175,29 @@ func cmdReview(ctx context.Context, args []string) error {
 	if (*scoreLabels || *commitStatus || *approve) && !*post {
 		return errors.New("--score-labels, --commit-status and --approve need --post")
 	}
-	var approval *app.Approval
-	if *approve {
-		block, err := approvalBlock(*approveBlock)
-		if err != nil {
+	// Flags win over the config (issue #40); set records which were given,
+	// so --approve=false can turn off what the config turns on.
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	approval, err := approvalFrom(cfg.Review.Approve, set, *approve, *approveBlock, *approveMinScore, *approveWithdraw)
+	if err != nil {
+		return err
+	}
+	if !*post {
+		approval = nil // the config's approve applies to posting runs only
+	}
+	given := func(name string, v bool) *bool {
+		if !set[name] {
+			return nil
+		}
+		return &v
+	}
+	var failOnFlag *string
+	if set["fail-on"] {
+		if err := config.CheckSeverity("--fail-on", *failOn); err != nil {
 			return err
 		}
-		if *approveMinScore < 0 || *approveMinScore > 100 {
-			return errors.New("--approve-min-score: want 0 to 100")
-		}
-		approval = &app.Approval{Block: block, MinScore: *approveMinScore, Withdraw: *approveWithdraw}
+		failOnFlag = failOn
 	}
 	// CODEREVIEW_OVERRIDES carries per-repository settings as JSON (set by
 	// Divmora Code Review Console); flags override it.
@@ -264,7 +277,7 @@ func cmdReview(ctx context.Context, args []string) error {
 	if *diagramOnly {
 		return diagramOnlyRun(ctx, runner, client, ref, *post, ov, *format, *output, logger)
 	}
-	out, err := runner.Review(ctx, client, ref, app.Options{Auto: *auto, Full: *full, Post: *post, Overrides: ov, Commands: *commands, ScoreLabels: *scoreLabels, CommitStatus: *commitStatus, Approval: approval})
+	out, err := runner.Review(ctx, client, ref, app.Options{Auto: *auto, Full: *full, Post: *post, Overrides: ov, Commands: *commands, ScoreLabels: given("score-labels", *scoreLabels), CommitStatus: given("commit-status", *commitStatus), FailOn: failOnFlag, Approval: approval})
 	if err != nil {
 		return err
 	}
@@ -315,11 +328,11 @@ func cmdReview(ctx context.Context, args []string) error {
 	if *post {
 		logger.Info("published review", "pr", ref.String(), "inline_comments", out.Posted, "not_inline", len(out.Rejected)+len(res.Overflow))
 	}
-	if *failOn != "" {
-		min := review.ParseSeverity(*failOn)
+	if out.FailOn != "" && out.FailOn != "none" {
+		min := review.ParseSeverity(out.FailOn)
 		for _, f := range append(append([]review.Finding{}, res.Findings...), res.Overflow...) {
 			if f.Severity.AtLeast(min) {
-				logger.Warn("failing: finding at or above --fail-on", "severity", f.Severity, "path", f.Path, "line", f.EndLine)
+				logger.Warn("failing: finding at or above fail_on", "fail_on", out.FailOn, "severity", f.Severity, "path", f.Path, "line", f.EndLine)
 				return exitCode(3)
 			}
 		}
@@ -724,6 +737,41 @@ func isTTY(f *os.File) bool {
 
 // approvalBlock reads --approve-block strictly: a typo must not approve
 // more than intended.
+// approvalFrom is the approval rule: the config's review.approve, with
+// each --approve flag that was given winning. Nil when approvals are off.
+func approvalFrom(a config.Approve, set map[string]bool, approve bool, block string, minScore int, withdraw bool) (*app.Approval, error) {
+	on := a.Enabled != nil && *a.Enabled
+	if set["approve"] {
+		on = approve
+	}
+	if !on {
+		return nil, nil
+	}
+	if !set["approve-block"] && a.Block != "" {
+		if err := config.CheckSeverity("review.approve.block", a.Block); err != nil {
+			return nil, err
+		}
+		block = a.Block
+	}
+	if !set["approve-min-score"] {
+		if a.MinScore < 0 || a.MinScore > 100 {
+			return nil, errors.New("review.approve.min_score: want 0 to 100")
+		}
+		minScore = a.MinScore
+	}
+	if !set["approve-withdraw"] && a.Withdraw != nil {
+		withdraw = *a.Withdraw
+	}
+	sev, err := approvalBlock(block)
+	if err != nil {
+		return nil, err
+	}
+	if minScore < 0 || minScore > 100 {
+		return nil, errors.New("--approve-min-score: want 0 to 100")
+	}
+	return &app.Approval{Block: sev, MinScore: minScore, Withdraw: withdraw}, nil
+}
+
 func approvalBlock(v string) (review.Severity, error) {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "none", "":

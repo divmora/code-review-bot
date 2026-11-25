@@ -360,7 +360,7 @@ func TestCommitStatusLifecycle(t *testing.T) {
 	ref := vcs.Ref{Platform: vcs.GitHub, Host: "github.com", Repo: "o/r", Number: 7}
 
 	r := newRunner(t, llmSrv.URL)
-	if _, err := r.Review(context.Background(), client, ref, Options{Post: true, CommitStatus: true}); err != nil {
+	if _, err := r.Review(context.Background(), client, ref, Options{Post: true, CommitStatus: ptr(true)}); err != nil {
 		t.Fatal(err)
 	}
 	if len(gh.statuses) != 2 || gh.statuses[0]["state"] != "pending" || gh.statuses[1]["state"] != "success" || gh.statuses[1]["sha"] != "head1" {
@@ -377,7 +377,7 @@ func TestCommitStatusLifecycle(t *testing.T) {
 	ghSrv2 := httptest.NewServer(gh2.handler(t))
 	defer ghSrv2.Close()
 	broken := newRunner(t, "http://127.0.0.1:1")
-	if _, err := broken.Review(context.Background(), vcs.NewGitHub(ghSrv2.URL, vcs.StaticToken("t")), ref, Options{Post: true, CommitStatus: true}); err == nil {
+	if _, err := broken.Review(context.Background(), vcs.NewGitHub(ghSrv2.URL, vcs.StaticToken("t")), ref, Options{Post: true, CommitStatus: ptr(true)}); err == nil {
 		t.Fatal("expected the review to fail")
 	}
 	if len(gh2.statuses) != 2 || gh2.statuses[0]["state"] != "pending" || gh2.statuses[1]["state"] != "failure" {
@@ -429,7 +429,7 @@ func TestBitbucketEndToEnd(t *testing.T) {
 	r := newRunner(t, llmSrv.URL)
 	client := vcs.NewBitbucket(bb.URL, vcs.BitbucketAuth{Token: "t"})
 	ref := vcs.Ref{Platform: vcs.Bitbucket, Host: "bitbucket.org", Repo: "acme/web", Number: 7}
-	out, err := r.Review(context.Background(), client, ref, Options{Post: true, CommitStatus: true, ScoreLabels: true})
+	out, err := r.Review(context.Background(), client, ref, Options{Post: true, CommitStatus: ptr(true), ScoreLabels: ptr(true)})
 	if err != nil {
 		t.Fatal(err)
 	}

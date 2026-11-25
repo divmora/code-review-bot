@@ -139,7 +139,7 @@ Every response is also parsed leniently (fenced or prose-wrapped JSON), so weake
 
 **Bitbucket Pipelines**: see [`examples/bitbucket-pipelines.yml`](examples/bitbucket-pipelines.yml). The PR is detected from `BITBUCKET_PR_ID`, `BITBUCKET_WORKSPACE` and `BITBUCKET_REPO_SLUG`.
 
-`--auto` applies the repo's `auto_review` rules (drafts, title keywords, base branches). `--fail-on <severity>` exits with code 3 so you can gate merges. `--format sarif` produces output for code-scanning dashboards.
+`--auto` applies the repo's `auto_review` rules (drafts, title keywords, base branches). `--fail-on <severity>` (or `fail_on` in the config) exits with code 3 so you can gate merges. `--format sarif` produces output for code-scanning dashboards.
 
 Tips for CI:
 - **Keep it advisory.** The GitLab example sets `allow_failure: true` so a provider outage never blocks a pipeline. Add `--fail-on critical` only when you want the review to gate merges.
@@ -166,7 +166,7 @@ The CLI is designed to be driven by schedulers such as Divmora Code Review Conso
 | Per-repo admin settings | `CODEREVIEW_OVERRIDES` JSON: `profile`, `max_comments`, `min_severity`, `model`, `auto_review`, `drafts`, `instructions`, `learnings` |
 | Output | `--format json`: the full result (findings, summary, usage), plus `posted`, `rejected` and `pr_url`, and with `--approve` also `approval` and `approval_reason`; `{"skipped": true, "skip_reason": ...}` when skipped |
 | Logs | stderr |
-| Exit code | `0` success, `1` error, `3` a finding met `--fail-on` |
+| Exit code | `0` success, `1` error, `3` a finding met `--fail-on` (or the config's `fail_on`) |
 
 ## Scores and verification
 
@@ -203,6 +203,19 @@ With `--post --approve` the bot approves the PR/MR when the review passes its ru
 | `--approve-block` | `major` | A finding at or above this severity blocks approval: `critical`, `major`, `minor`, `nitpick`, or `none` to approve whatever the review found. New findings, ones beyond `max_comments` and ones still present from an earlier review all count; questions never do. |
 | `--approve-min-score` | `0` | Also need every score at least this high (1 to 100); `0` ignores the scores. |
 | `--approve-withdraw` | on | When a later review doesn't pass, withdraw the bot's earlier approval. `--approve-withdraw=false` leaves it, and the code host's own rules (for example "reset approvals on push") decide. |
+
+The same settings can live in the operator config, so CI jobs don't repeat them. A flag that is given wins over its key, and `--approve=false` turns off what the config turns on:
+
+```yaml
+review:
+  approve:
+    enabled: true     # --approve (still needs --post)
+    block: major      # --approve-block
+    min_score: 0      # --approve-min-score
+    withdraw: true    # --approve-withdraw
+```
+
+`review.approve` is read from the operator config only. An `approve:` key in a repository's `.codereview.yaml` is ignored, with a warning in the log, so whoever controls the bot's token also controls what it approves.
 
 A review that can't decide (part of it failed, the change is too large, or nothing was reviewed) of a **new commit** withdraws the bot's earlier approval too, so an approval never carries over to code that wasn't fully reviewed; with `--approve-withdraw=false` it is left as it is. A re-review of the same commit that can't decide leaves an approval of that commit in place. A blocking finding withdraws it either way. **Files the review skipped count as unreviewed** and keep the bot from approving: deleted files, deletion-only changes, binary files, diffs too large for the code host's API, files with a generated-code header and the default ignores (lockfiles, `*_generated.go`, `*.pb.go`, `*.min.js`, vendored code…). The PR's author controls those files, so a change could hide there. The approval reason lists them (`2 changed file(s) weren't reviewed: …`). Files the base branch's own `path_filters` exclude, and pure renames, don't count; exclude what you accept unreviewed there, for example `path_filters: ["!**/package-lock.json"]`. The JSON result says what happened in `approval`: `approved`, `already_approved`, `withdrawn`, `not_approved`, `unchanged` or `failed` (the code host refused; the review is still posted), with `approval_reason`.
 
@@ -306,7 +319,12 @@ auto_review:
   drafts: false
   base_branches: ["main", "release/*"]
   ignore_title_keywords: ["WIP", "[skip review]"]
+score_labels: true             # as --score-labels (with --post)
+commit_status: true            # as --commit-status (with --post)
+fail_on: major                 # as --fail-on: exit 3 at this severity or above
 ```
+
+`score_labels`, `commit_status` and `fail_on` also work under `review.defaults` in the operator config. A flag that is given wins (`--score-labels=false`, `--fail-on none`). Without `--post`, `score_labels` and `commit_status` from a config are skipped quietly, so one config serves dry runs and posting runs. A repository can set `fail_on` where the operator has none, and otherwise only make it stricter: a looser value or `none` is ignored, with a warning. Approvals can't be set here (see [Approving pull requests](#approving-pull-requests)).
 
 ### Review profiles
 
