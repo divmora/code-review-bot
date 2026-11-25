@@ -71,10 +71,20 @@ review:
   verify_can_add: false     # let the verifier add findings it thinks were missed (unverified; off by default)
   # anchor_scores: true     # start scores from the previous review's, so they move only when the change does (--full rescores)
   repo_config_file: .codereview.yaml
+  # Approve PRs that pass, as --approve does (with --post). Operator config
+  # only: .codereview.yaml can't set it. Flags win over each key.
+  # approve:
+  #   enabled: true
+  #   block: major            # critical | major | minor | nitpick | none
+  #   min_score: 0            # 1-100: also need every score this high
+  #   withdraw: true          # withdraw the bot's earlier approval when a review doesn't pass
   defaults:                 # same keys as .codereview.yaml; repos override them
     profile: balanced
     max_comments: 25
     path_filters: ["!**/testdata/**"]
+    # score_labels: true      # --score-labels (with --post)
+    # commit_status: true     # --commit-status (with --post)
+    # fail_on: critical       # --fail-on: exit 3 at this severity; repos may only make it stricter
 
 github:
   # A token that can read the PR and post comments. In GitHub Actions the

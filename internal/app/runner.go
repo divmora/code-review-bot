@@ -82,11 +82,15 @@ type Options struct {
 	// Commands advertises @bot chat commands in the summary (webhook services).
 	Commands bool
 	// ScoreLabels sets Quality/Security/Maintainability score labels on the
-	// PR (with Post only).
-	ScoreLabels bool
+	// PR (with Post only). Nil follows the config's score_labels.
+	ScoreLabels *bool
 	// CommitStatus sets a "codereview" status on the reviewed commit:
 	// running during the review, then success or failed (with Post only).
-	CommitStatus bool
+	// Nil follows the config's commit_status.
+	CommitStatus *bool
+	// FailOn is --fail-on when given; nil follows the config's fail_on.
+	// The result is Outcome.FailOn: the caller decides the exit code.
+	FailOn *string
 	// Approval approves the PR when the review passes its rule, and may
 	// withdraw an earlier approval (with Post only). Nil leaves approvals
 	// alone.
@@ -104,6 +108,17 @@ type Outcome struct {
 	// constants; empty without Options.Approval), and ApprovalReason why.
 	Approval       string
 	ApprovalReason string
+	// FailOn is the severity that fails the run (--fail-on, else the
+	// config's fail_on); "" or "none" never fails.
+	FailOn string
+}
+
+// flagOr is a flag's value when given, else the config's (default false).
+func flagOr(flag, cfg *bool) bool {
+	if flag != nil {
+		return *flag
+	}
+	return cfg != nil && *cfg
 }
 
 // LLM returns a (cached) client for the model chain. repoModel is a model
@@ -266,6 +281,9 @@ func (r *Runner) loadRepoConfig(ctx context.Context, c vcs.Client, pr *vcs.PR) (
 	if err != nil {
 		return r.Cfg.Review.Defaults, fmt.Errorf("%s: %w", r.Cfg.Review.RepoConfigFile, err)
 	}
+	for _, why := range rc.Ignored {
+		r.Logger.Warn("ignored a repository setting", "file", r.Cfg.Review.RepoConfigFile, "setting", why)
+	}
 	return rc, nil
 }
 
@@ -279,6 +297,11 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 	out := &Outcome{PR: pr}
 	rc, cfgErr := r.RepoConfig(ctx, c, pr)
 	opts.Overrides.Apply(&rc)
+	out.FailOn = config.NormSeverity(rc.FailOn)
+	if opts.FailOn != nil {
+		out.FailOn = config.NormSeverity(*opts.FailOn)
+	}
+	scoreLabels, commitStatus := flagOr(opts.ScoreLabels, rc.ScoreLabels), flagOr(opts.CommitStatus, rc.CommitStatus)
 	if pr.State == vcs.StateClosed || pr.State == vcs.StateMerged {
 		if opts.Auto {
 			// A pipeline can run for an MR that was closed or merged in the
@@ -305,7 +328,7 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 	}
 
 	statusDone := true
-	if opts.Post && opts.CommitStatus && pr.HeadSHA != "" {
+	if opts.Post && commitStatus && pr.HeadSHA != "" {
 		statusDone = false
 		r.setStatus(ctx, c, pr, vcs.StatusRunning, "Review in progress")
 		// Any return before the final success status (an error, a failed
@@ -439,7 +462,7 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 		r.setStatus(ctx, c, pr, vcs.StatusSuccess, statusLine(res, out.Posted))
 		statusDone = true
 	}
-	if opts.ScoreLabels && res.Scores != nil {
+	if scoreLabels && res.Scores != nil {
 		colors := map[string]string{"green": "2da44e", "orange": "fb8c00", "red": "d73a49"}
 		var labels []vcs.ScoreLabel
 		for _, n := range review.ScoreNames {

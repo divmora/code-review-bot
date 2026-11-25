@@ -66,6 +66,18 @@ type RepoConfig struct {
 	// Model picks one of the operator's named model profiles (only when
 	// the operator sets allow_repo_model).
 	Model string `yaml:"model"`
+
+	// ScoreLabels and CommitStatus set --score-labels and --commit-status
+	// from the config (with --post only); flags win (issue #40).
+	ScoreLabels  *bool `yaml:"score_labels"`
+	CommitStatus *bool `yaml:"commit_status"`
+	// FailOn sets --fail-on: exit 3 when a finding is at least this severe
+	// (critical, major, minor, nitpick or none). A repository may only make
+	// the operator's stricter.
+	FailOn string `yaml:"fail_on"`
+
+	// Ignored lists repository settings that were not applied, and why.
+	Ignored []string `yaml:"-"`
 }
 
 // Labels configures label suggestions: off (default), suggest (a line in
@@ -253,6 +265,25 @@ func ParseRepoConfig(data []byte, defaults RepoConfig) (RepoConfig, error) {
 	if rc.Model != "" {
 		out.Model = rc.Model
 	}
+	if rc.ScoreLabels != nil {
+		out.ScoreLabels = rc.ScoreLabels
+	}
+	if rc.CommitStatus != nil {
+		out.CommitStatus = rc.CommitStatus
+	}
+	if rc.FailOn != "" {
+		if err := CheckSeverity("fail_on", rc.FailOn); err != nil {
+			return defaults, fmt.Errorf("parse repo config: %w", err)
+		}
+		if failOnAllowed(rc.FailOn, defaults.FailOn) {
+			out.FailOn = NormSeverity(rc.FailOn)
+		} else {
+			out.Ignored = append(out.Ignored, fmt.Sprintf("fail_on %q: a repository can only make the operator's fail_on (%s) stricter", rc.FailOn, defaults.FailOn))
+		}
+	}
+	if hasKey(data, "approve") {
+		out.Ignored = append(out.Ignored, "approve: approvals are set in the operator config (review.approve) or with --approve, not in the repository")
+	}
 	if rc.HighLevelSummary != nil {
 		out.HighLevelSummary = rc.HighLevelSummary
 	}
@@ -296,6 +327,16 @@ func ParseRepoConfig(data []byte, defaults RepoConfig) (RepoConfig, error) {
 	}
 	out.fillDefaults()
 	return out, nil
+}
+
+// hasKey reports whether a YAML document has a top-level key.
+func hasKey(data []byte, key string) bool {
+	var m map[string]any
+	if yaml.Unmarshal(data, &m) != nil {
+		return false
+	}
+	_, ok := m[key]
+	return ok
 }
 
 // IncludePath applies PathFilters to a file path.

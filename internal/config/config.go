@@ -81,8 +81,12 @@ type Review struct {
 	// so they change only when the change does (default on; --full always
 	// scores from scratch).
 	AnchorScores *bool `yaml:"anchor_scores"`
-	// RepoConfigFile is the per-repo config path at the PR head.
+	// RepoConfigFile is the per-repo config path, read from the PR's base
+	// commit so a PR cannot change the rules it is reviewed under.
 	RepoConfigFile string `yaml:"repo_config_file"`
+	// Approve sets --approve and its flags from the config; flags win.
+	// Operator config only (issue #40).
+	Approve Approve `yaml:"approve"`
 }
 
 // GitHub configures github.com or GitHub Enterprise Server.
