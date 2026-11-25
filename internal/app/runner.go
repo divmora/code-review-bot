@@ -259,8 +259,13 @@ func (r *Runner) VerifyLLM() (llm.Client, error) {
 // RepoConfig loads .codereview.yaml. It is read from the base commit, not
 // the PR head, so a PR cannot weaken the rules it is reviewed under. Local
 // reviews read the working tree.
-func (r *Runner) RepoConfig(ctx context.Context, c vcs.Client, pr *vcs.PR) (config.RepoConfig, error) {
+//
+// The result is in precedence order, lowest first: the operator's
+// review.defaults, .codereview.yaml, the admin overrides (ov), then the
+// CLI flags (Override), so a flag wins over an override (issue #45).
+func (r *Runner) RepoConfig(ctx context.Context, c vcs.Client, pr *vcs.PR, ov *config.Overrides) (config.RepoConfig, error) {
 	rc, err := r.loadRepoConfig(ctx, c, pr)
+	ov.Apply(&rc)
 	if r.Override != nil {
 		r.Override(&rc)
 	}
@@ -295,8 +300,7 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 		return nil, fmt.Errorf("get pull request: %w", err)
 	}
 	out := &Outcome{PR: pr}
-	rc, cfgErr := r.RepoConfig(ctx, c, pr)
-	opts.Overrides.Apply(&rc)
+	rc, cfgErr := r.RepoConfig(ctx, c, pr, opts.Overrides)
 	out.FailOn = config.NormSeverity(rc.FailOn)
 	if opts.FailOn != nil {
 		out.FailOn = config.NormSeverity(*opts.FailOn)
@@ -572,8 +576,7 @@ func (r *Runner) Diagram(ctx context.Context, c vcs.Client, ref vcs.Ref, post bo
 		return nil, fmt.Errorf("get pull request: %w", err)
 	}
 	out := &DiagramOutcome{PR: pr}
-	rc, _ := r.RepoConfig(ctx, c, pr)
-	ov.Apply(&rc)
+	rc, _ := r.RepoConfig(ctx, c, pr, ov)
 	state, err := c.BotState(ctx, pr)
 	if err != nil {
 		return nil, fmt.Errorf("read previous review state: %w", err)
@@ -631,8 +634,7 @@ func (r *Runner) Answer(ctx context.Context, c vcs.Client, ref vcs.Ref, question
 	if err != nil {
 		return "", err
 	}
-	rc, _ := r.RepoConfig(ctx, c, pr)
-	ov.Apply(&rc)
+	rc, _ := r.RepoConfig(ctx, c, pr, ov)
 	files, err := c.Files(ctx, pr)
 	if err != nil {
 		return "", err
