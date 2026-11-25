@@ -151,7 +151,6 @@ func cmdReview(ctx context.Context, args []string) error {
 	profile := fs.String("profile", "", "override review profile: chill, balanced, assertive")
 	maxComments := fs.Int("max-comments", 0, "override the inline comment limit")
 	minSeverity := fs.String("min-severity", "", "drop findings below this severity: critical, major, minor, nitpick")
-	commands := fs.Bool("commands", false, "advertise @bot chat commands in the summary (when a webhook service answers them)")
 	scoreLabels := fs.Bool("score-labels", false, "with --post: set Quality/Security/Maintainability score labels on the PR/MR")
 	commitStatus := fs.Bool("commit-status", false, "with --post: set a \"codereview\" status on the reviewed commit (running, then success/failed)")
 	approve := fs.Bool("approve", false, "with --post: approve the PR/MR when the review passes the rule in review.approve (block, min_score, withdraw); --approve=false turns off the config's approve.enabled")
@@ -275,7 +274,7 @@ func cmdReview(ctx context.Context, args []string) error {
 	if *diagramOnly {
 		return diagramOnlyRun(ctx, runner, client, ref, *post, ov, *format, *output, logger)
 	}
-	out, err := runner.Review(ctx, client, ref, app.Options{Auto: *auto, Full: *full, Post: *post, Overrides: ov, Commands: *commands, ScoreLabels: given("score-labels", *scoreLabels), CommitStatus: given("commit-status", *commitStatus), FailOn: failOnFlag, Approval: approval})
+	out, err := runner.Review(ctx, client, ref, app.Options{Auto: *auto, Full: *full, Post: *post, Overrides: ov, ScoreLabels: given("score-labels", *scoreLabels), CommitStatus: given("commit-status", *commitStatus), FailOn: failOnFlag, Approval: approval})
 	if err != nil {
 		return err
 	}
@@ -725,7 +724,7 @@ func reorder(args []string) []string {
 	return append(flags, pos...)
 }
 
-var boolFlags = map[string]bool{"local": true, "post": true, "full": true, "auto": true, "commands": true, "score-labels": true, "commit-status": true,
+var boolFlags = map[string]bool{"local": true, "post": true, "full": true, "auto": true, "score-labels": true, "commit-status": true,
 	"approve": true, "diagram-only": true, "verbose": true, "h": true, "help": true}
 
 func isTTY(f *os.File) bool {

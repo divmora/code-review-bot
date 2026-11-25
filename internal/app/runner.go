@@ -79,8 +79,6 @@ type Options struct {
 	// Overrides are admin-panel settings for this repository; they win over
 	// .codereview.yaml, and their model choice is trusted.
 	Overrides *config.Overrides
-	// Commands advertises @bot chat commands in the summary (webhook services).
-	Commands bool
 	// ScoreLabels sets Quality/Security/Maintainability score labels on the
 	// PR (with Post only). Nil follows the config's score_labels.
 	ScoreLabels *bool
@@ -453,7 +451,7 @@ func (r *Runner) Review(ctx context.Context, c vcs.Client, ref vcs.Ref, opts Opt
 	}
 	bot := r.botName(ctx, c, ref.Host)
 	summaryPH, titlePH := placeholders(rc, bot)
-	body := review.SummaryMarkdown(res, review.SummaryOptions{BotName: bot, Rejected: out.Rejected, Posted: out.Posted, Commands: opts.Commands, TitlePlaceholder: titlePH})
+	body := review.SummaryMarkdown(res, review.SummaryOptions{BotName: bot, Rejected: out.Rejected, Posted: out.Posted, Commands: r.Cfg.Review.Commands, TitlePlaceholder: titlePH})
 	if err := c.UpsertSummary(ctx, pr, state, body); err != nil {
 		return out, fmt.Errorf("post summary: %w", err)
 	}

@@ -87,6 +87,11 @@ type Review struct {
 	// Approve sets --approve and its flags from the config; flags win.
 	// Operator config only (issue #40).
 	Approve Approve `yaml:"approve"`
+	// Commands lists the @bot chat commands in the summary footer. Set it
+	// only when a webhook service (such as Divmora Code Review Console)
+	// answers them: the CLI runs once and can't. Operator config only
+	// (issue #47).
+	Commands bool `yaml:"commands"`
 }
 
 // GitHub configures github.com or GitHub Enterprise Server.
