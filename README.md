@@ -214,7 +214,7 @@ review:
 | `min_score` | `0` | Also need every score at least this high (1 to 100); `0` ignores the scores. |
 | `withdraw` | `true` | When a later review doesn't pass, withdraw the bot's earlier approval. `false` leaves it, and the code host's own rules (for example "reset approvals on push") decide. |
 
-`--approve` with no `review.approve` uses these defaults. Divmora Code Review Console sends its per-repository rule as `approve` in `CODEREVIEW_OVERRIDES`, and the fields it sets win over `review.approve`. `review.approve` is read from the operator config only. An `approve:` key in a repository's `.codereview.yaml` is ignored, with a warning in the log, so whoever controls the bot's token also controls what it approves.
+`--approve` with no `review.approve` uses these defaults. Divmora Code Review Console writes each repository's rule into the config file it gives the job. `review.approve` is read from the operator config only. An `approve:` key in a repository's `.codereview.yaml` is ignored, with a warning in the log, so whoever controls the bot's token also controls what it approves.
 
 > **Upgrading from 0.8 or earlier:** `--approve-block`, `--approve-min-score` and `--approve-withdraw` were removed. Move their values to `review.approve.block`, `min_score` and `withdraw`.
 

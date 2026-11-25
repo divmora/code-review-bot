@@ -5,43 +5,23 @@ import (
 	"strings"
 )
 
-// Approve configures approving pull requests (issue #40). The rule comes
-// from the operator config (review.approve) and from the console's
-// CODEREVIEW_OVERRIDES (issue #42); --approve turns it on or off for one
+// Approve configures approving pull requests (issues #40, #42). The rule
+// comes from the operator config (review.approve), which Divmora Code
+// Review Console writes for each job; --approve turns it on or off for one
 // run. A repository's .codereview.yaml cannot set it.
 type Approve struct {
 	// Enabled approves PRs that pass (with --post). Default false.
-	Enabled *bool `yaml:"enabled" json:"enabled,omitempty"`
+	Enabled *bool `yaml:"enabled"`
 	// Block is the lowest severity that blocks approval: critical, major,
 	// minor, nitpick, or none (approve whatever the review found). Empty:
 	// unset (default major).
-	Block string `yaml:"block" json:"block,omitempty"`
+	Block string `yaml:"block"`
 	// MinScore, 1 to 100, also needs every score at least this high; 0
 	// ignores the scores. Nil: unset (default 0).
-	MinScore *int `yaml:"min_score" json:"min_score,omitempty"`
+	MinScore *int `yaml:"min_score"`
 	// Withdraw removes the bot's earlier approval when a review doesn't
 	// pass or can't judge a new commit. Default true.
-	Withdraw *bool `yaml:"withdraw" json:"withdraw,omitempty"`
-}
-
-// Merge returns a with the set fields of o written over it.
-func (a Approve) Merge(o *Approve) Approve {
-	if o == nil {
-		return a
-	}
-	if o.Enabled != nil {
-		a.Enabled = o.Enabled
-	}
-	if o.Block != "" {
-		a.Block = o.Block
-	}
-	if o.MinScore != nil {
-		a.MinScore = o.MinScore
-	}
-	if o.Withdraw != nil {
-		a.Withdraw = o.Withdraw
-	}
-	return a
+	Withdraw *bool `yaml:"withdraw"`
 }
 
 // severityRank orders fail_on and approve.block values; "" and "none"

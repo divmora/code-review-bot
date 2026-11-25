@@ -195,15 +195,11 @@ func cmdReview(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	// The approval rule: review.approve, then the console's overrides,
-	// then --approve on or off (issue #42).
+	// The approval rule is review.approve; --approve turns it on or off
+	// for one run (issue #42).
 	var approval *app.Approval
 	if *post {
-		rule := cfg.Review.Approve
-		if ov != nil {
-			rule = rule.Merge(ov.Approve)
-		}
-		if approval, err = approvalFrom(rule, set["approve"], *approve); err != nil {
+		if approval, err = approvalFrom(cfg.Review.Approve, set["approve"], *approve); err != nil {
 			return err
 		}
 	}
@@ -758,14 +754,14 @@ func approvalFrom(a config.Approve, flagSet, approve bool) (*app.Approval, error
 	out := &app.Approval{Block: sev, Withdraw: a.Withdraw == nil || *a.Withdraw}
 	if a.MinScore != nil {
 		if *a.MinScore < 0 || *a.MinScore > 100 {
-			return nil, errors.New("approve.min_score: want 0 to 100")
+			return nil, errors.New("review.approve.min_score: want 0 to 100")
 		}
 		out.MinScore = *a.MinScore
 	}
 	return out, nil
 }
 
-// approvalBlock reads approve.block strictly: a typo must not approve
+// approvalBlock reads review.approve.block strictly: a typo must not approve
 // more than intended.
 func approvalBlock(v string) (review.Severity, error) {
 	switch strings.ToLower(strings.TrimSpace(v)) {
@@ -780,5 +776,5 @@ func approvalBlock(v string) (review.Severity, error) {
 	case "nitpick":
 		return review.Nitpick, nil
 	}
-	return "", fmt.Errorf("approve.block %q: want critical, major, minor, nitpick or none", v)
+	return "", fmt.Errorf("review.approve.block %q: want critical, major, minor, nitpick or none", v)
 }
