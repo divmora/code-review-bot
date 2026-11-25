@@ -77,3 +77,39 @@ func TestCommandsSetting(t *testing.T) {
 		t.Errorf("commands in the repository: ignored = %v", rc.Ignored)
 	}
 }
+
+// A repository's learnings reach the review, after the operator's and
+// before the console's overrides (issue #53).
+func TestRepoLearnings(t *testing.T) {
+	defaults := RepoConfig{Profile: Balanced, Learnings: []Learning{{Text: "operator"}}}
+	rc, err := ParseRepoConfig([]byte("learnings:\n  - text: repository\n    path: \"legacy/**\"\n"), defaults)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ov := &Overrides{Learnings: []Learning{{Text: "console"}}}
+	ov.Apply(&rc)
+	var got []string
+	for _, l := range rc.Learnings {
+		got = append(got, l.Text+"|"+l.Path)
+	}
+	if strings.Join(got, ",") != "operator|,repository|legacy/**,console|" {
+		t.Errorf("learnings = %v", got)
+	}
+	if b := rc.LearningsBlock(); !strings.Contains(b, "- [legacy/**] repository") {
+		t.Errorf("the repository's learning should be in the prompt block:\n%s", b)
+	}
+	if len(defaults.Learnings) != 1 {
+		t.Errorf("the operator's defaults must not change: %v", defaults.Learnings)
+	}
+
+	// The prompt block still caps the total.
+	var many strings.Builder
+	many.WriteString("learnings:\n")
+	for i := 0; i < MaxLearnings+20; i++ {
+		many.WriteString("  - text: rule\n")
+	}
+	rc, _ = ParseRepoConfig([]byte(many.String()), defaults)
+	if n := strings.Count(rc.LearningsBlock(), "\n"); n != MaxLearnings {
+		t.Errorf("prompt block has %d learnings, want the cap %d", n, MaxLearnings)
+	}
+}

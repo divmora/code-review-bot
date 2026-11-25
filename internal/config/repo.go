@@ -237,6 +237,9 @@ func ParseRepoConfig(data []byte, defaults RepoConfig) (RepoConfig, error) {
 	}
 	out.PathInstructions = append(append([]PathInstruction{}, defaults.PathInstructions...), rc.PathInstructions...)
 	out.PathFilters = append(append([]string{}, defaults.PathFilters...), rc.PathFilters...)
+	// Learnings add up: the operator's first, then the repository's
+	// (the console's overrides are appended after, issue #53).
+	out.Learnings = append(append([]Learning{}, defaults.Learnings...), rc.Learnings...)
 	if rc.MaxComments > 0 {
 		out.MaxComments = rc.MaxComments
 	}
