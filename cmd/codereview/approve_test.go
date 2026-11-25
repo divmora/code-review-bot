@@ -23,31 +23,55 @@ func TestApprovalBlock(t *testing.T) {
 	}
 }
 
-// review.approve applies when no --approve flag is given; each given flag
-// wins over its key, and --approve=false turns approvals off (issue #40).
+// The rule is review.approve with the console's overrides written over
+// it; a given --approve only turns it on or off (issues #40, #42).
 func TestApprovalFrom(t *testing.T) {
-	yes, no := true, false
-	cfg := config.Approve{Enabled: &yes, Block: "minor", MinScore: 60, Withdraw: &no}
-	none := map[string]bool{}
-	// Flag defaults as the review command declares them.
-	a, err := approvalFrom(cfg, none, false, "major", 0, true)
+	yes, no, sixty, zero := true, false, 60, 0
+	cfg := config.Approve{Enabled: &yes, Block: "minor", MinScore: &sixty, Withdraw: &no}
+	a, err := approvalFrom(cfg, false, false)
 	if err != nil || a == nil || a.Block != review.Minor || a.MinScore != 60 || a.Withdraw {
 		t.Fatalf("from the config: %+v %v", a, err)
 	}
-	a, err = approvalFrom(cfg, map[string]bool{"approve-block": true, "approve-min-score": true, "approve-withdraw": true}, false, "none", 0, true)
-	if err != nil || a == nil || a.Block != "" || a.MinScore != 0 || !a.Withdraw {
-		t.Fatalf("flags should win: %+v %v", a, err)
+	// Overrides win field by field; an explicit min_score 0 counts.
+	a, err = approvalFrom(cfg.Merge(&config.Approve{Block: "none", MinScore: &zero}), false, false)
+	if err != nil || a == nil || a.Block != "" || a.MinScore != 0 || a.Withdraw {
+		t.Fatalf("overrides should win: %+v %v", a, err)
 	}
-	if a, _ := approvalFrom(cfg, map[string]bool{"approve": true}, false, "major", 0, true); a != nil {
+	if a, _ := approvalFrom(cfg, true, false); a != nil {
 		t.Errorf("--approve=false should turn it off: %+v", a)
 	}
-	if a, _ := approvalFrom(config.Approve{}, map[string]bool{"approve": true}, true, "major", 0, true); a == nil || a.Block != review.Major || !a.Withdraw {
-		t.Errorf("--approve alone keeps the flag defaults: %+v", a)
+	if a, _ := approvalFrom(cfg.Merge(&config.Approve{Enabled: &no}), false, false); a != nil {
+		t.Errorf("overrides enabled=false should turn it off: %+v", a)
 	}
-	if a, _ := approvalFrom(config.Approve{}, none, false, "major", 0, true); a != nil {
+	if a, _ := approvalFrom(config.Approve{}, true, true); a == nil || a.Block != review.Major || a.MinScore != 0 || !a.Withdraw {
+		t.Errorf("--approve alone uses the defaults (major, 0, withdraw): %+v", a)
+	}
+	if a, _ := approvalFrom(config.Approve{}, false, false); a != nil {
 		t.Errorf("off by default: %+v", a)
 	}
-	if _, err := approvalFrom(config.Approve{Enabled: &yes, Block: "high"}, none, false, "major", 0, true); err == nil || !strings.Contains(err.Error(), "review.approve.block") {
-		t.Errorf("a bad config block should name the key: %v", err)
+	if _, err := approvalFrom(config.Approve{Enabled: &yes, Block: "high"}, false, false); err == nil || !strings.Contains(err.Error(), "approve.block") {
+		t.Errorf("a bad block should name the key: %v", err)
+	}
+}
+
+// The console sends the rule in CODEREVIEW_OVERRIDES; it is validated like
+// the YAML, and the removed flags are gone.
+func TestApproveOverrides(t *testing.T) {
+	cfg := &config.Config{}
+	t.Setenv("CODEREVIEW_OVERRIDES", `{"approve":{"enabled":true,"block":"none","min_score":0,"withdraw":false}}`)
+	ov, err := overridesFromEnv(cfg)
+	if err != nil || ov.Approve == nil || ov.Approve.MinScore == nil || *ov.Approve.MinScore != 0 || ov.Approve.Block != "none" || *ov.Approve.Withdraw {
+		t.Fatalf("overrides: %+v %v", ov, err)
+	}
+	for _, bad := range []string{`{"approve":{"block":"high"}}`, `{"approve":{"min_score":101}}`, `{"approve":{"blok":"major"}}`} {
+		t.Setenv("CODEREVIEW_OVERRIDES", bad)
+		if _, err := overridesFromEnv(cfg); err == nil {
+			t.Errorf("%s should be rejected", bad)
+		}
+	}
+	for _, f := range []string{"approve-block", "approve-min-score", "approve-withdraw"} {
+		if boolFlags[f] {
+			t.Errorf("--%s should be gone", f)
+		}
 	}
 }

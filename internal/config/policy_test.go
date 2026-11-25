@@ -49,7 +49,7 @@ func TestCheckPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a := cfg.Review.Approve; !*a.Enabled || a.Block != "none" || a.MinScore != 70 || *a.Withdraw {
+	if a := cfg.Review.Approve; !*a.Enabled || a.Block != "none" || *a.MinScore != 70 || *a.Withdraw {
 		t.Errorf("approve = %+v", a)
 	}
 	_, err = Strict("t", []byte("model: openai:m\nreview:\n  approve:\n    block: high\n    min_score: 101\n  defaults:\n    fail_on: blocker\n"))

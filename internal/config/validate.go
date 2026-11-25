@@ -87,6 +87,6 @@ func (c *Config) Check() error {
 	if err := CheckSeverity("review.defaults.fail_on", c.Review.Defaults.FailOn); err != nil {
 		errs = append(errs, err)
 	}
-	errs = append(errs, c.Review.Approve.check()...)
+	errs = append(errs, c.Review.Approve.Check("review.approve")...)
 	return errors.Join(errs...)
 }

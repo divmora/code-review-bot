@@ -474,6 +474,9 @@ type Overrides struct {
 	// Labels are the label suggestion settings; set fields win over the
 	// repository's.
 	Labels *Labels `json:"labels,omitempty"`
+	// Approve is the approval rule; set fields win over review.approve.
+	// The CLI applies it (it isn't part of the repository config).
+	Approve *Approve `json:"approve,omitempty"`
 	// Learnings are added to the repository's own (e.g. from the console).
 	Learnings []Learning `json:"learnings,omitempty"`
 }
@@ -529,6 +532,11 @@ func (o *Overrides) Validate(profiles map[string]bool) error {
 	if o.Labels != nil {
 		if err := o.Labels.validate(); err != nil {
 			return err
+		}
+	}
+	if o.Approve != nil {
+		if errs := o.Approve.Check("approve"); len(errs) > 0 {
+			return errs[0]
 		}
 	}
 	if len(o.Learnings) > MaxLearnings {

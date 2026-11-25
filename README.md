@@ -196,28 +196,29 @@ Reviewing the same commit again gives the same scores. The summary shows what mo
 
 ## Approving pull requests
 
-With `--post --approve` the bot approves the PR/MR when the review passes its rule, as the token's user (or the GitHub App):
-
-| Flag | Default | Meaning |
-|---|---|---|
-| `--approve-block` | `major` | A finding at or above this severity blocks approval: `critical`, `major`, `minor`, `nitpick`, or `none` to approve whatever the review found. New findings, ones beyond `max_comments` and ones still present from an earlier review all count; questions never do. |
-| `--approve-min-score` | `0` | Also need every score at least this high (1 to 100); `0` ignores the scores. |
-| `--approve-withdraw` | on | When a later review doesn't pass, withdraw the bot's earlier approval. `--approve-withdraw=false` leaves it, and the code host's own rules (for example "reset approvals on push") decide. |
-
-The same settings can live in the operator config, so CI jobs don't repeat them. A flag that is given wins over its key, and `--approve=false` turns off what the config turns on:
+With `--post --approve` the bot approves the PR/MR when the review passes its rule, as the token's user (or the GitHub App). The rule is set in the operator config:
 
 ```yaml
 review:
   approve:
-    enabled: true     # --approve (still needs --post)
-    block: major      # --approve-block
-    min_score: 0      # --approve-min-score
-    withdraw: true    # --approve-withdraw
+    enabled: true     # approve on every posting run; --approve=false turns it off for one run
+    block: major
+    min_score: 0
+    withdraw: true
 ```
 
-`review.approve` is read from the operator config only. An `approve:` key in a repository's `.codereview.yaml` is ignored, with a warning in the log, so whoever controls the bot's token also controls what it approves.
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | Approve without passing `--approve`. Either way, approval needs `--post`. |
+| `block` | `major` | A finding at or above this severity blocks approval: `critical`, `major`, `minor`, `nitpick`, or `none` to approve whatever the review found. New findings, ones beyond `max_comments` and ones still present from an earlier review all count; questions never do. |
+| `min_score` | `0` | Also need every score at least this high (1 to 100); `0` ignores the scores. |
+| `withdraw` | `true` | When a later review doesn't pass, withdraw the bot's earlier approval. `false` leaves it, and the code host's own rules (for example "reset approvals on push") decide. |
 
-A review that can't decide (part of it failed, the change is too large, or nothing was reviewed) of a **new commit** withdraws the bot's earlier approval too, so an approval never carries over to code that wasn't fully reviewed; with `--approve-withdraw=false` it is left as it is. A re-review of the same commit that can't decide leaves an approval of that commit in place. A blocking finding withdraws it either way. **Files the review skipped count as unreviewed** and keep the bot from approving: deleted files, deletion-only changes, binary files, diffs too large for the code host's API, files with a generated-code header and the default ignores (lockfiles, `*_generated.go`, `*.pb.go`, `*.min.js`, vendored code…). The PR's author controls those files, so a change could hide there. The approval reason lists them (`2 changed file(s) weren't reviewed: …`). Files the base branch's own `path_filters` exclude, and pure renames, don't count; exclude what you accept unreviewed there, for example `path_filters: ["!**/package-lock.json"]`. The JSON result says what happened in `approval`: `approved`, `already_approved`, `withdrawn`, `not_approved`, `unchanged` or `failed` (the code host refused; the review is still posted), with `approval_reason`.
+`--approve` with no `review.approve` uses these defaults. Divmora Code Review Console sends its per-repository rule as `approve` in `CODEREVIEW_OVERRIDES`, and the fields it sets win over `review.approve`. `review.approve` is read from the operator config only. An `approve:` key in a repository's `.codereview.yaml` is ignored, with a warning in the log, so whoever controls the bot's token also controls what it approves.
+
+> **Upgrading from 0.8 or earlier:** `--approve-block`, `--approve-min-score` and `--approve-withdraw` were removed. Move their values to `review.approve.block`, `min_score` and `withdraw`.
+
+A review that can't decide (part of it failed, the change is too large, or nothing was reviewed) of a **new commit** withdraws the bot's earlier approval too, so an approval never carries over to code that wasn't fully reviewed; with `withdraw: false` it is left as it is. A re-review of the same commit that can't decide leaves an approval of that commit in place. A blocking finding withdraws it either way. **Files the review skipped count as unreviewed** and keep the bot from approving: deleted files, deletion-only changes, binary files, diffs too large for the code host's API, files with a generated-code header and the default ignores (lockfiles, `*_generated.go`, `*.pb.go`, `*.min.js`, vendored code…). The PR's author controls those files, so a change could hide there. The approval reason lists them (`2 changed file(s) weren't reviewed: …`). Files the base branch's own `path_filters` exclude, and pure renames, don't count; exclude what you accept unreviewed there, for example `path_filters: ["!**/package-lock.json"]`. The JSON result says what happened in `approval`: `approved`, `already_approved`, `withdrawn`, `not_approved`, `unchanged` or `failed` (the code host refused; the review is still posted), with `approval_reason`.
 
 On each code host:
 - **GitLab:** approves as the token's user and unapproves the same way. The user must be allowed to approve (and can't approve a merge request it authored).
@@ -340,7 +341,7 @@ Set it in `.codereview.yaml` or with `--profile`. The profile also sets the defa
 
 | Command | Purpose |
 |---|---|
-| `review [URL]` | Review one PR/MR. Flags: `--local`, `--dir`, `--base`, `--post`, `--full`, `--auto`, `--format text\|markdown\|json\|sarif`, `--output`, `--fail-on`, `--profile`, `--max-comments`, `--min-severity`, `--commands`, `--score-labels`, `--commit-status`, `--approve`, `--approve-block`, `--approve-min-score`, `--approve-withdraw`, `--verify-model` |
+| `review [URL]` | Review one PR/MR. Flags: `--local`, `--dir`, `--base`, `--post`, `--full`, `--auto`, `--format text\|markdown\|json\|sarif`, `--output`, `--fail-on`, `--profile`, `--max-comments`, `--min-severity`, `--commands`, `--score-labels`, `--commit-status`, `--approve`, `--verify-model`, `--diagram`, `--labels`, `--diagram-only` |
 | `ask URL "question"` | Answer a question about a PR (`--post` to reply on it) |
 | `models` | List providers, profiles and the active chain |
 | `ping` | Test each model in the chain |
