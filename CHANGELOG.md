@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.9.0](https://github.com/divmora/code-review-bot/compare/v0.8.0...v0.9.0) (2026-11-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* --commands is removed; set review.commands: true in the operator config instead.
+* --approve-block, --approve-min-score and --approve-withdraw are removed; set review.approve.block, min_score and withdraw instead.
+
+### Features
+
+* **config:** let $CODEREVIEW_CONFIG_YAML beat an implicit ./codereview.yaml ([#50](https://github.com/divmora/code-review-bot/issues/50)) ([e430626](https://github.com/divmora/code-review-bot/commit/e430626c0da17e43b69578e833b8cb21eb2591a7)), closes [#49](https://github.com/divmora/code-review-bot/issues/49)
+* **config:** set approval, score labels, commit status and fail_on in YAML ([#41](https://github.com/divmora/code-review-bot/issues/41)) ([4d7ba89](https://github.com/divmora/code-review-bot/commit/4d7ba899171273ddd93e506e297905dab1377fef)), closes [#40](https://github.com/divmora/code-review-bot/issues/40)
+* move --commands to the operator config (review.commands) ([#48](https://github.com/divmora/code-review-bot/issues/48)) ([d3e66a0](https://github.com/divmora/code-review-bot/commit/d3e66a0bed60ffc2783a0b297de690de555863d6)), closes [#47](https://github.com/divmora/code-review-bot/issues/47)
+* remove --approve-block, --approve-min-score and --approve-withdraw ([#44](https://github.com/divmora/code-review-bot/issues/44)) ([15decca](https://github.com/divmora/code-review-bot/commit/15decca54566b5c1bca364712c0bffbe4f8d323f))
+
+
+### Bug Fixes
+
+* keep learnings from .codereview.yaml ([#54](https://github.com/divmora/code-review-bot/issues/54)) ([59c56c1](https://github.com/divmora/code-review-bot/commit/59c56c1e42b1edcd827007d5b04f7a86f09f438e)), closes [#53](https://github.com/divmora/code-review-bot/issues/53)
+* let --profile, --max-comments and --min-severity win over CODEREVIEW_OVERRIDES ([#46](https://github.com/divmora/code-review-bot/issues/46)) ([e4f9f31](https://github.com/divmora/code-review-bot/commit/e4f9f316fe608483bd6a27249f2359689867f153)), closes [#45](https://github.com/divmora/code-review-bot/issues/45)
+
 ## [0.8.0](https://github.com/divmora/code-review-bot/compare/v0.7.0...v0.8.0) (2026-11-24)
 
 
