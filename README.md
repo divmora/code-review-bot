@@ -159,11 +159,11 @@ The CLI is designed to be driven by schedulers such as Divmora Code Review Conso
 
 | Input | How |
 |---|---|
-| Which PR | the URL argument, or detected from GitHub Actions / GitLab CI variables |
-| Engine config | `--config codereview.yaml`, or the YAML itself in `CODEREVIEW_CONFIG_YAML` (model profiles, limits; reference keys with `api_key_env`). Lookup order: `--config`, `$CODEREVIEW_CONFIG` (a path), `$CODEREVIEW_CONFIG_YAML`, then `./codereview.yaml`. A file in the working directory never replaces the env var: in CI that directory can be the PR's checkout. |
+| Which PR | the URL argument, or detected from GitHub Actions, GitLab CI or Bitbucket Pipelines variables |
+| Engine config | `--config codereview.yaml`, or the YAML itself in `CODEREVIEW_CONFIG_YAML` (model profiles, limits; reference keys with `api_key_env`). Lookup order: `--config`, `$CODEREVIEW_CONFIG` (a path), `$CODEREVIEW_CONFIG_YAML`, then `./codereview.yaml`; a file in the working directory never replaces the env var. See [Configuration files and precedence](#configuration-files-and-precedence) |
 | Checking input | `codereview config validate [--format json]`: rejects unknown keys, unknown providers, unresolvable models and invalid `CODEREVIEW_OVERRIDES`, without calling a model. Exit `1` when invalid |
 | Secrets | environment only: provider keys, `GITHUB_TOKEN`, `GITLAB_TOKEN` |
-| Per-repo admin settings | `CODEREVIEW_OVERRIDES` JSON: `profile`, `max_comments`, `min_severity`, `model`, `auto_review`, `drafts`, `instructions`, `learnings` |
+| Per-repo admin settings | `CODEREVIEW_OVERRIDES` JSON: `profile`, `max_comments`, `min_severity`, `model`, `auto_review`, `drafts`, `instructions`, `diagram`, `labels`, `learnings`. They win over the repository's `.codereview.yaml`; CLI flags win over them |
 | Output | `--format json`: the full result (findings, summary, usage), plus `posted`, `rejected` and `pr_url`, and with `--approve` also `approval` and `approval_reason`; `{"skipped": true, "skip_reason": ...}` when skipped |
 | Logs | stderr |
 | Exit code | `0` success, `1` error, `3` a finding met `--fail-on` (or the config's `fail_on`) |
@@ -179,6 +179,7 @@ The walkthrough step gives the scores. A field the model gets wrong there (a str
 With `--post --score-labels` the scores are also set as labels on the PR/MR, replacing earlier scores:
 - GitLab: scoped labels, `Quality Score::85`;
 - GitHub: `Quality Score: 85`.
+
 Colours follow the score: green 80+, orange 50–79, red below 50.
 
 **Scores are anchored to the previous review** (`review.anchor_scores`, on by default), so they don't swing between runs when nothing material changed. Each review keeps the last scores, the commit they were given at and the findings then open, in its summary comment. The next review shows them to the model, which keeps each score unless the update changes it and says why when it does. Then, in code:
@@ -195,6 +196,17 @@ Colours follow the score: green 80+, orange 50–79, red below 50.
 Dismissed and still-open findings keep counting towards the scores and their caps, though they aren't posted again. The summary says `Earlier findings: 2 fixed, 1 dismissed, 0 still open.` and lists the dismissed ones. A score that rises gives the count, for example `Security 55 → 95 (1 finding(s) fixed)`. The JSON result has `previous_findings` with `fixed`, `dismissed` and `still_open`, and the fixed and dismissed findings. Resolved threads are known on GitLab only; on GitHub and Bitbucket an unfixed finding counts as still open. Moved or re-indented code still counts as unchanged. Summaries written before this version have no findings kept, so their next review works as before.
 
 Reviewing the same commit again gives the same scores. The summary shows what moved and why, for example `Since the last review: Quality 82 → 76 (new major finding in auth.go)`. `--full` scores from scratch, and so does `review.anchor_scores: false`. Summaries written before this version are anchored to the scores table they show.
+
+### Verification pass
+
+A second, skeptical **verification pass** (`review.verify`, on by default; one extra model call) checks every finding against the code and the PR description. A different model catches more of the reviewer's mistakes: set `review.verify_model` or pass `--verify-model`. The verifier classifies each finding as confirmed, false positive, **speculative** (only a problem if the code changed later, e.g. "injection" through a constant) or a question for the author. By default (`review.verify_can_drop: confident`) it removes minor findings it disputes, and major or critical ones that are speculative or that it is at least 80% sure are false; other disputed findings are posted as questions with its reason. `minor` keeps every disputed major finding as a question; `all` drops anything disputed. Every removal is listed in the summary. The verifier doesn't add findings of its own unless `review.verify_can_add: true`: its additions would go unverified, and in testing one was a false "command injection". The pass:
+- it removes false positives;
+- it turns findings that depend on data or configuration into **❓ questions** for the author;
+- with `verify_can_add`, it may add a clearly missed major issue, which still has to pass the same diff validation.
+
+The summary reports what the pass changed.
+
+Models vary from run to run. `review.passes: 2` (or 3) reviews each batch independently that many times and keeps the union of the findings, merged and then verified, at the cost of one more reviewer call per batch per pass. Findings already posted by an earlier run go through verification again too, so a speculative one cannot keep lowering the scores. Scores follow the remaining findings: a dimension with a critical, major or minor issue is capped at 40, 70 or 88; a dimension with no remaining issue of at least minor severity scores at least 85, so questions and findings the verifier removed never pull a score down. The reviewer is told to ask (not accuse) when a change loosens a check, saying what now passes that used to fail, and to back every security finding with input an attacker controls in the current code.
 
 ## Approving pull requests
 
@@ -227,14 +239,6 @@ On each code host:
 - **GitHub:** an approving review on the current commit, marked so the bot finds it again; withdrawing dismisses it. Dismissing needs write access, and branch protection can limit who may dismiss reviews.
 - **Bitbucket:** approves as the token's account.
 
-A second, skeptical **verification pass** (`review.verify`, on by default; one extra model call) checks every finding against the code and the PR description. A different model catches more of the reviewer's mistakes: set `review.verify_model` or pass `--verify-model`. The verifier classifies each finding as confirmed, false positive, **speculative** (only a problem if the code changed later, e.g. "injection" through a constant) or a question for the author. By default (`review.verify_can_drop: confident`) it removes minor findings it disputes, and major or critical ones that are speculative or that it is at least 80% sure are false; other disputed findings are posted as questions with its reason. `minor` keeps every disputed major finding as a question; `all` drops anything disputed. Every removal is listed in the summary. The verifier doesn't add findings of its own unless `review.verify_can_add: true`: its additions would go unverified, and in testing one was a false "command injection". The pass:
-- it removes false positives;
-- it turns findings that depend on data or configuration into **❓ questions** for the author;
-- with `verify_can_add`, it may add a clearly missed major issue, which still has to pass the same diff validation.
-The summary reports what the pass changed.
-
-
-Models vary from run to run. `review.passes: 2` (or 3) reviews each batch independently that many times and keeps the union of the findings, merged and then verified, at the cost of one more reviewer call per batch per pass. Findings already posted by an earlier run go through verification again too, so a speculative one cannot keep lowering the scores. Scores follow the remaining findings: a dimension with a critical, major or minor issue is capped at 40, 70 or 88; a dimension with no remaining issue of at least minor severity scores at least 85, so questions and findings the verifier removed never pull a score down. The reviewer is told to ask (not accuse) when a change loosens a check, saying what now passes that used to fail, and to back every security finding with input an attacker controls in the current code.
 ## Bitbucket Cloud
 
 Review `https://bitbucket.org/<workspace>/<repo>/pull-requests/<id>` like any other PR. Two kinds of credential work:
@@ -273,9 +277,9 @@ The bot uses the same conventions and `.codereview.yaml` keys as CodeRabbit, and
 | `high_level_summary_placeholder` | `@codereview summary` | Put it in the description to choose where the block goes; it works even when `high_level_summary` is false. |
 | `high_level_summary_instructions` | | How to write the summary. |
 | `auto_title_placeholder` | `@codereview` | Put it in the PR title to have it replaced with a generated Conventional Commits title. Titles are never changed otherwise. |
+| `auto_title_instructions` | | How to write the title. |
 
 The bot's name in these placeholders and in the summary's command hints is `bot_name` from `codereview.yaml`. When it is not set, the bot uses the user its token belongs to (for example `@gitlab-bot`), so the code host autocompletes and notifies the real account. It falls back to `@codereview` when the token has no user (GitHub App installation tokens, Bitbucket repository access tokens): set `bot_name` there, for a GitHub App to its slug. Placeholders follow the name, e.g. `@gitlab-bot summary`.
-| `auto_title_instructions` | | How to write the title. |
 
 When the title or description doesn't match the code, the summary comment shows a **📝 Description check** with what's wrong or missing, plus a suggested title. The PR is read again just before editing, so edits made during the review are kept.
 
@@ -304,6 +308,32 @@ or pass them in `CODEREVIEW_OVERRIDES` (`"learnings": [{"text": "...", "path": "
 ## Context for large files
 
 Files up to `review.full_file_max_lines` (800) are sent whole. Larger files are sent as numbered excerpts of `review.context_lines` (60) lines around each change, so the model sees nearby definitions instead of a bare hunk.
+
+## Configuration files and precedence
+
+There are two config files, and both are optional.
+
+| | Operator config: `codereview.yaml` | Repository config: `.codereview.yaml` |
+|---|---|---|
+| Where | wherever the bot runs (see the lookup order below) | committed to the repository, read from the PR's **base** commit |
+| Holds | models and keys, code hosts, engine tuning (`review:`), `review.approve`, `review.commands`, and `review.defaults`: the review settings every repository starts from | review settings only: profile, instructions, path rules, labels, diagram, `auto_review`, `score_labels`, `commit_status`, `fail_on`… |
+| Set by | whoever runs the bot (you, CI, or the console) | the repository's maintainers |
+
+The operator config is read from the first of:
+1. `--config <path>`;
+2. `$CODEREVIEW_CONFIG` (a path);
+3. `$CODEREVIEW_CONFIG_YAML` (the YAML itself; the console uses this);
+4. `./codereview.yaml` or `./codereview.yml` in the working directory.
+
+A review setting is resolved from lowest to highest: built-in defaults, `review.defaults` in the operator config, the repository's `.codereview.yaml`, the console's `CODEREVIEW_OVERRIDES`, then CLI flags. A flag you pass always wins, including `--approve=false`, `--score-labels=false` and `--fail-on none`.
+
+The operator keeps control of a few things:
+- `review.approve` and `review.commands` are operator-only. In `.codereview.yaml` they are ignored, with a warning.
+- A repository's `fail_on` can only be stricter than the operator's.
+- A repository's `model` is used only when the operator sets `allow_repo_model: true`.
+- `instructions`, `path_instructions` and `path_filters` add up across levels instead of replacing each other.
+
+Every key, with its default and the file it belongs in, is on the [configuration reference](https://divmora.github.io/code-review-bot/configuration.html).
 
 ## Per-repository config
 
