@@ -5,19 +5,20 @@ import (
 	"strings"
 )
 
-// Approve configures approving pull requests, as --approve and its flags do
-// (issue #40). It lives in the operator config (review.approve) only: a
-// repository's .codereview.yaml cannot turn approvals on or loosen them.
+// Approve configures approving pull requests (issues #40, #42). The rule
+// comes from the operator config (review.approve), which Divmora Code
+// Review Console writes for each job; --approve turns it on or off for one
+// run. A repository's .codereview.yaml cannot set it.
 type Approve struct {
 	// Enabled approves PRs that pass (with --post). Default false.
 	Enabled *bool `yaml:"enabled"`
 	// Block is the lowest severity that blocks approval: critical, major,
-	// minor, nitpick, or none (approve whatever the review found).
-	// Default major.
+	// minor, nitpick, or none (approve whatever the review found). Empty:
+	// unset (default major).
 	Block string `yaml:"block"`
 	// MinScore, 1 to 100, also needs every score at least this high; 0
-	// ignores the scores.
-	MinScore int `yaml:"min_score"`
+	// ignores the scores. Nil: unset (default 0).
+	MinScore *int `yaml:"min_score"`
 	// Withdraw removes the bot's earlier approval when a review doesn't
 	// pass or can't judge a new commit. Default true.
 	Withdraw *bool `yaml:"withdraw"`
@@ -50,13 +51,14 @@ func failOnAllowed(repo, operator string) bool {
 	return r > 0 && r <= o
 }
 
-func (a Approve) check() []error {
+// Check validates the rule; key names it in errors (e.g. "review.approve").
+func (a Approve) Check(key string) []error {
 	var errs []error
-	if err := CheckSeverity("review.approve.block", a.Block); err != nil {
+	if err := CheckSeverity(key+".block", a.Block); err != nil {
 		errs = append(errs, err)
 	}
-	if a.MinScore < 0 || a.MinScore > 100 {
-		errs = append(errs, fmt.Errorf("review.approve.min_score %d: want 0 to 100", a.MinScore))
+	if a.MinScore != nil && (*a.MinScore < 0 || *a.MinScore > 100) {
+		errs = append(errs, fmt.Errorf("%s.min_score %d: want 0 to 100", key, *a.MinScore))
 	}
 	return errs
 }

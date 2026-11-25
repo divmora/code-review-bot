@@ -154,10 +154,7 @@ func cmdReview(ctx context.Context, args []string) error {
 	commands := fs.Bool("commands", false, "advertise @bot chat commands in the summary (when a webhook service answers them)")
 	scoreLabels := fs.Bool("score-labels", false, "with --post: set Quality/Security/Maintainability score labels on the PR/MR")
 	commitStatus := fs.Bool("commit-status", false, "with --post: set a \"codereview\" status on the reviewed commit (running, then success/failed)")
-	approve := fs.Bool("approve", false, "with --post: approve the PR/MR when the review passes (see --approve-block, --approve-min-score)")
-	approveBlock := fs.String("approve-block", "major", "with --approve: a finding at or above this severity blocks approval: critical, major, minor, nitpick, or none (approve whatever the review found)")
-	approveMinScore := fs.Int("approve-min-score", 0, "with --approve: also need every score (1-100) at least this high; 0 ignores the scores")
-	approveWithdraw := fs.Bool("approve-withdraw", true, "with --approve: withdraw the bot's earlier approval when a review doesn't pass, or can't judge a new commit (too large, partly failed); --approve-withdraw=false leaves it")
+	approve := fs.Bool("approve", false, "with --post: approve the PR/MR when the review passes the rule in review.approve (block, min_score, withdraw); --approve=false turns off the config's approve.enabled")
 	verifyModel := fs.String("verify-model", "", "model for the verification pass (profile or provider:model); default review.verify_model or the review model")
 	diagram := fs.String("diagram", "", "flow diagram in the walkthrough: off, auto (when the change spans several layers) or always; default the repo config's diagram (off)")
 	labels := fs.String("labels", "", "label suggestions: off, suggest (a line in the walkthrough) or apply (also set them on the PR, with --post); default the repo config's labels.mode (off). Only the project's own labels that labels.allow matches are used")
@@ -179,13 +176,6 @@ func cmdReview(ctx context.Context, args []string) error {
 	// so --approve=false can turn off what the config turns on.
 	set := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
-	approval, err := approvalFrom(cfg.Review.Approve, set, *approve, *approveBlock, *approveMinScore, *approveWithdraw)
-	if err != nil {
-		return err
-	}
-	if !*post {
-		approval = nil // the config's approve applies to posting runs only
-	}
 	given := func(name string, v bool) *bool {
 		if !set[name] {
 			return nil
@@ -204,6 +194,14 @@ func cmdReview(ctx context.Context, args []string) error {
 	ov, err := overridesFromEnv(cfg)
 	if err != nil {
 		return err
+	}
+	// The approval rule is review.approve; --approve turns it on or off
+	// for one run (issue #42).
+	var approval *app.Approval
+	if *post {
+		if approval, err = approvalFrom(cfg.Review.Approve, set["approve"], *approve); err != nil {
+			return err
+		}
 	}
 	if *diagram != "" {
 		switch *diagram {
@@ -728,50 +726,43 @@ func reorder(args []string) []string {
 }
 
 var boolFlags = map[string]bool{"local": true, "post": true, "full": true, "auto": true, "commands": true, "score-labels": true, "commit-status": true,
-	"approve": true, "approve-withdraw": true, "verbose": true, "h": true, "help": true}
+	"approve": true, "diagram-only": true, "verbose": true, "h": true, "help": true}
 
 func isTTY(f *os.File) bool {
 	st, err := f.Stat()
 	return err == nil && st.Mode()&os.ModeCharDevice != 0
 }
 
-// approvalBlock reads --approve-block strictly: a typo must not approve
-// more than intended.
-// approvalFrom is the approval rule: the config's review.approve, with
-// each --approve flag that was given winning. Nil when approvals are off.
-func approvalFrom(a config.Approve, set map[string]bool, approve bool, block string, minScore int, withdraw bool) (*app.Approval, error) {
+// approvalFrom turns the approval rule into what the runner applies: nil
+// when approvals are off. A given --approve (flagSet) wins over enabled.
+func approvalFrom(a config.Approve, flagSet, approve bool) (*app.Approval, error) {
 	on := a.Enabled != nil && *a.Enabled
-	if set["approve"] {
+	if flagSet {
 		on = approve
 	}
 	if !on {
 		return nil, nil
 	}
-	if !set["approve-block"] && a.Block != "" {
-		if err := config.CheckSeverity("review.approve.block", a.Block); err != nil {
-			return nil, err
-		}
-		block = a.Block
-	}
-	if !set["approve-min-score"] {
-		if a.MinScore < 0 || a.MinScore > 100 {
-			return nil, errors.New("review.approve.min_score: want 0 to 100")
-		}
-		minScore = a.MinScore
-	}
-	if !set["approve-withdraw"] && a.Withdraw != nil {
-		withdraw = *a.Withdraw
+	block := a.Block
+	if block == "" {
+		block = "major"
 	}
 	sev, err := approvalBlock(block)
 	if err != nil {
 		return nil, err
 	}
-	if minScore < 0 || minScore > 100 {
-		return nil, errors.New("--approve-min-score: want 0 to 100")
+	out := &app.Approval{Block: sev, Withdraw: a.Withdraw == nil || *a.Withdraw}
+	if a.MinScore != nil {
+		if *a.MinScore < 0 || *a.MinScore > 100 {
+			return nil, errors.New("review.approve.min_score: want 0 to 100")
+		}
+		out.MinScore = *a.MinScore
 	}
-	return &app.Approval{Block: sev, MinScore: minScore, Withdraw: withdraw}, nil
+	return out, nil
 }
 
+// approvalBlock reads review.approve.block strictly: a typo must not approve
+// more than intended.
 func approvalBlock(v string) (review.Severity, error) {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "none", "":
@@ -785,5 +776,5 @@ func approvalBlock(v string) (review.Severity, error) {
 	case "nitpick":
 		return review.Nitpick, nil
 	}
-	return "", fmt.Errorf("--approve-block %q: want critical, major, minor, nitpick or none", v)
+	return "", fmt.Errorf("review.approve.block %q: want critical, major, minor, nitpick or none", v)
 }
